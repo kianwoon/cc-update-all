@@ -12,7 +12,7 @@
     {
       "name": "update-all-plugins",
       "source": "./",
-      "description": "Bulk-update all installed Claude Code plugin marketplaces via /cc-update-all slash command",
+      "description": "Bulk-update all installed Claude Code plugin marketplaces via /update-all-plugins slash command",
       "version": "1.0.0",
       "author": {
         "name": "kianwoonwong"
