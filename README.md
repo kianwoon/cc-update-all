@@ -2,6 +2,14 @@
 
 Bulk-update all installed Claude Code plugin marketplaces from within the CLI.
 
+## Why?
+
+Claude Code has no built-in command to update all your plugin marketplaces at once. Each marketplace must be refreshed individually — open settings, find the marketplace, click refresh, wait, repeat. When you have 5+ marketplaces installed, this gets tedious fast.
+
+**cc-update-all** solves this by running `/cc-update-all` inside Claude Code. One command, all marketplaces updated.
+
+It's also useful for multi-machine setups — keep your plugins in sync across machines without remembering which marketplaces to refresh. Just run the command and everything pulls the latest.
+
 ## Installation
 
 ```bash
