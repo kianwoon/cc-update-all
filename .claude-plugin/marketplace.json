@@ -10,7 +10,7 @@
   },
   "plugins": [
     {
-      "name": "cc-update-all",
+      "name": "update-all-plugins",
       "source": "./",
       "description": "Bulk-update all installed Claude Code plugin marketplaces via /cc-update-all slash command",
       "version": "1.0.0",

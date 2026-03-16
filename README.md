@@ -6,7 +6,7 @@ Bulk-update all installed Claude Code plugin marketplaces from within the CLI.
 
 Claude Code has no built-in command to update all your plugin marketplaces at once. Each marketplace must be refreshed individually — open settings, find the marketplace, click refresh, wait, repeat. When you have 5+ marketplaces installed, this gets tedious fast.
 
-**cc-update-all** solves this by running `/cc-update-all` inside Claude Code. One command, all marketplaces updated.
+**cc-update-all** solves this by running `/update-all-plugins` inside Claude Code. One command, all marketplaces updated.
 
 It's also useful for multi-machine setups — keep your plugins in sync across machines without remembering which marketplaces to refresh. Just run the command and everything pulls the latest.
 
@@ -17,17 +17,17 @@ It's also useful for multi-machine setups — keep your plugins in sync across m
 claude plugin marketplace add kianwoon/cc-update-all
 
 # Install plugin
-claude plugin install cc-update-all@cc-update-all --scope user
+claude plugin install update-all-plugins@cc-update-all --scope user
 ```
 
 ## Usage
 
 ```
-/cc-update-all              Update all marketplaces with installed plugins
-/cc-update-all --dry-run    Preview changes without updating
-/cc-update-all --only NAME  Update only a specific marketplace
-/cc-update-all --json       Output results as JSON
-/cc-update-all --force      Update even with dirty working trees
+/update-all-plugins              Update all marketplaces with installed plugins
+/update-all-plugins --dry-run    Preview changes without updating
+/update-all-plugins --only NAME  Update only a specific marketplace
+/update-all-plugins --json       Output results as JSON
+/update-all-plugins --force      Update even with dirty working trees
 ```
 
 ## How It Works
