@@ -6,7 +6,7 @@ Bulk-update all installed Claude Code plugin marketplaces from within the CLI.
 
 ```bash
 # Add marketplace
-claude plugin marketplace add kianwoonwong/cc-update-all
+claude plugin marketplace add kianwoon/cc-update-all
 
 # Install plugin
 claude plugin install cc-update-all@cc-update-all --scope user
