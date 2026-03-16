@@ -11,6 +11,7 @@
 #   --only NAME     Update only the named marketplace
 #   --json          Output summary as JSON
 #   --force         Proceed even with dirty git repos
+#   --check         Report outdated marketplaces without updating (exit 1 if any)
 #   --help          Show this help message
 #
 # Compatible with bash 3.2+ (macOS default) — no associative arrays used.
@@ -53,6 +54,7 @@ _DRY_RUN=0
 _ONLY_MARKETPLACE=""
 _JSON_MODE=0
 _FORCE=0
+_CHECK_MODE=0
 
 _PLUGINS_DIR="${HOME}/.claude/plugins"
 _INSTALLED_PLUGINS_FILE="${_PLUGINS_DIR}/installed_plugins.json"
@@ -110,9 +112,17 @@ parse_args() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --dry-run)     _DRY_RUN=1 ;;
-      --only)        shift; _ONLY_MARKETPLACE="$1" ;;
+      --only)
+        shift
+        if [[ $# -eq 0 || -z "${1:-}" ]]; then
+          err "--only requires a marketplace name"
+          exit 2
+        fi
+        _ONLY_MARKETPLACE="$1"
+        ;;
       --json)        _JSON_MODE=1 ;;
       --force)       _FORCE=1 ;;
+      --check)       _CHECK_MODE=1 ;;
       --help|-h)
         awk 'NR==1{next} /^# ===/{if(n>0){exit} n++;next} /^#/{sub(/^# ?/,"");print}' "$0"
         exit 0
@@ -285,9 +295,22 @@ update_marketplace() {
     fi
   fi
 
-  # Detect current branch
+  # Detect current branch and upstream remote
   local branch
   branch="$(git -C "$install_dir" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")"
+
+  local upstream
+  upstream="$(git -C "$install_dir" rev-parse --abbrev-ref "@{upstream}" 2>/dev/null || true)"
+
+  if [[ -z "$upstream" ]]; then
+    record_mp_result "$name" "no_upstream" "$before_sha" "$before_sha" "$plugins"
+    warn "  [SKIPPED] ${name}  no upstream branch configured"
+    return 0
+  fi
+
+  local remote branch_name
+  remote="${upstream%%/*}"
+  branch_name="${upstream#*/}"
 
   # Get before SHA
   local before_sha
@@ -303,12 +326,13 @@ update_marketplace() {
   if ! git -C "$install_dir" fetch --all --prune 2>/dev/null; then
     record_mp_result "$name" "fetch_failed" "$before_sha" "$before_sha" "$plugins"
     err "  [FAILED] ${name}  git fetch failed"
+    dim "  Rollback: git -C \"${install_dir}\" reset --hard ${before_sha}"
     mark_partial_failure
     return 0
   fi
 
   # Try fast-forward pull
-  if git -C "$install_dir" pull --ff-only "origin" "$branch" 2>&1; then
+  if git -C "$install_dir" pull --ff-only "$remote" "$branch_name" 2>&1; then
     local after_sha
     after_sha="$(git -C "$install_dir" rev-parse --short HEAD 2>/dev/null || echo "$before_sha")"
 
@@ -323,6 +347,7 @@ update_marketplace() {
     # ff-only failed — likely diverged
     record_mp_result "$name" "diverged" "$before_sha" "$before_sha" "$plugins"
     warn "  [SKIPPED] ${name}  cannot fast-forward (branch may have diverged)"
+    dim "  Rollback: git -C \"${install_dir}\" reset --hard ${before_sha}"
     mark_partial_failure
   fi
 }
@@ -379,6 +404,9 @@ print_summary_text() {
       diverged)
         warn "  [SKIPPED]  ${name}  cannot fast-forward"
         ;;
+      no_upstream)
+        warn "  [SKIPPED]  ${name}  no upstream branch configured"
+        ;;
       dry_run)
         dim "  [DRY RUN]  ${name}  ${before}"
         ;;
@@ -396,58 +424,93 @@ print_summary_text() {
 # Summary output (JSON mode)
 # ---------------------------------------------------------------------------
 print_summary_json() {
-  # Build marketplaces array
-  local marketplaces_json=""
-  local first=true
-
   local sorted_names
   sorted_names=$(get_mp_results_sorted)
 
-  while IFS= read -r name; do
-    [[ -z "$name" ]] && continue
+  if [[ -z "$sorted_names" ]] && has_jq; then
+    echo '{"marketplaces":[]}'
+    return 0
+  elif [[ -z "$sorted_names" ]]; then
+    printf '{\n  "marketplaces": []\n}\n'
+    return 0
+  fi
 
-    local status before after plugins_raw
-    status=$(get_mp_field "$name" 0)
-    before=$(get_mp_field "$name" 1)
-    after=$(get_mp_field "$name" 2)
-    plugins_raw=$(get_mp_field "$name" 3)
+  if has_jq; then
+    # Safe JSON via jq — proper string escaping
+    {
+      while IFS= read -r name; do
+        [[ -z "$name" ]] && continue
+        local status before after plugins_raw
+        status=$(get_mp_field "$name" 0)
+        before=$(get_mp_field "$name" 1)
+        after=$(get_mp_field "$name" 2)
+        plugins_raw=$(get_mp_field "$name" 3)
 
-    # Build installed_plugins JSON array
-    local plugins_json="[]"
-    if [[ -n "$plugins_raw" ]]; then
-      local p_first=true
-      plugins_json="["
-      local IFS_SAVE="$IFS"
-      IFS=','
-      for plugin in $plugins_raw; do
-        [[ -z "$plugin" ]] && continue
-        if [[ "$p_first" == "true" ]]; then
-          p_first=false
-        else
-          plugins_json+=", "
-        fi
-        plugins_json+="\"${plugin}\""
-      done
-      IFS="$IFS_SAVE"
-      plugins_json+="]"
-    fi
+        # Output tab-separated: name, status, before, after, plugins_csv
+        printf '%s\t%s\t%s\t%s\t%s\n' "$name" "$status" "$before" "$after" "$plugins_raw"
+      done <<< "$sorted_names"
+    } | jq -nR '
+      [inputs | split("\t") |
+        {
+          name: .[0],
+          status: (if .[1] == "fetch_failed" then "failed" else .[1] end),
+          before: .[2],
+          after: .[3],
+          installed_plugins: (
+            if .[4] == "" then []
+            else .[4] | split(",")
+            end
+          )
+        }
+      ] | {"marketplaces": .}'
+  else
+    # Best-effort fallback (no jq) — manual JSON, may break on unusual names
+    local marketplaces_json=""
+    local first=true
 
-    local comma=""
-    if [[ "$first" == "true" ]]; then
-      first=false
-    else
-      comma=","
-    fi
+    while IFS= read -r name; do
+      [[ -z "$name" ]] && continue
 
-    # Map internal status to output status
-    local output_status="$status"
-    case "$status" in
-      dry_run)       output_status="dry_run" ;;
-      fetch_failed)  output_status="failed" ;;
-      *)             output_status="$status" ;;
-    esac
+      local status before after plugins_raw
+      status=$(get_mp_field "$name" 0)
+      before=$(get_mp_field "$name" 1)
+      after=$(get_mp_field "$name" 2)
+      plugins_raw=$(get_mp_field "$name" 3)
 
-    marketplaces_json+="${comma}
+      local plugins_json="[]"
+      if [[ -n "$plugins_raw" ]]; then
+        local p_first=true
+        plugins_json="["
+        local IFS_SAVE="$IFS"
+        IFS=','
+        for plugin in $plugins_raw; do
+          [[ -z "$plugin" ]] && continue
+          if [[ "$p_first" == "true" ]]; then
+            p_first=false
+          else
+            plugins_json+=", "
+          fi
+          plugins_json+="\"${plugin}\""
+        done
+        IFS="$IFS_SAVE"
+        plugins_json+="]"
+      fi
+
+      local comma=""
+      if [[ "$first" == "true" ]]; then
+        first=false
+      else
+        comma=","
+      fi
+
+      local output_status="$status"
+      case "$status" in
+        dry_run)       output_status="dry_run" ;;
+        fetch_failed)  output_status="failed" ;;
+        *)             output_status="$status" ;;
+      esac
+
+      marketplaces_json+="${comma}
     {
       \"name\": \"${name}\",
       \"status\": \"${output_status}\",
@@ -455,10 +518,10 @@ print_summary_json() {
       \"after\": \"${after}\",
       \"installed_plugins\": ${plugins_json}
     }"
-  done <<< "$sorted_names"
+    done <<< "$sorted_names"
 
-  # Assemble final JSON
-  printf '{\n  "marketplaces": [%s\n  ]\n}\n' "$marketplaces_json"
+    printf '{\n  "marketplaces": [%s\n  ]\n}\n' "$marketplaces_json"
+  fi
 }
 
 # ---------------------------------------------------------------------------
@@ -513,6 +576,37 @@ main() {
       exit 1
     fi
     marketplace_names=("${filtered[@]}")
+  fi
+
+  # Step 2.5: --check mode — report outdated without updating
+  if [[ "$_CHECK_MODE" -eq 1 ]]; then
+    local has_outdated=false
+    for mp_name in "${marketplace_names[@]}"; do
+      local source_type install_dir repo
+      source_type=$(read_marketplace_source_type "$_KNOWN_MARKETPLACES_FILE" "$mp_name" || true)
+      install_dir=$(read_marketplace_install_location "$_KNOWN_MARKETPLACES_FILE" "$mp_name" || true)
+
+      if [[ "$source_type" != "github" ]] || [[ ! -d "${install_dir}/.git" ]]; then
+        continue
+      fi
+
+      git -C "$install_dir" fetch --all --prune 2>/dev/null || true
+
+      local local_sha remote_sha
+      local_sha="$(git -C "$install_dir" rev-parse HEAD 2>/dev/null || echo "")"
+      remote_sha="$(git -C "$install_dir" rev-parse "@{upstream}" 2>/dev/null || echo "")"
+
+      if [[ -n "$local_sha" ]] && [[ -n "$remote_sha" ]] && [[ "$local_sha" != "$remote_sha" ]]; then
+        has_outdated=true
+        ok "  [OUTDATED] ${mp_name}"
+      fi
+    done
+
+    if [[ "$has_outdated" == "true" ]]; then
+      exit 1
+    fi
+    dim "All marketplaces are up to date."
+    exit 0
   fi
 
   # Step 3: Update each marketplace

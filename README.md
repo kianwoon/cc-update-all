@@ -25,6 +25,7 @@ claude plugin install update-all-plugins@cc-update-all --scope user
 ```
 /update-all-plugins              Update all marketplaces with installed plugins
 /update-all-plugins --dry-run    Preview changes without updating
+/update-all-plugins --check      Check which marketplaces are behind (no update)
 /update-all-plugins --only NAME  Update only a specific marketplace
 /update-all-plugins --json       Output results as JSON
 /update-all-plugins --force      Update even with dirty working trees
@@ -41,7 +42,7 @@ claude plugin install update-all-plugins@cc-update-all --scope user
 ## Dependencies
 
 - `git` — required
-- `jq` — optional (enhanced JSON parsing, has fallback)
+- `jq` — optional (safe JSON output; best-effort fallback when missing)
 
 ## Flags
 
@@ -49,6 +50,7 @@ claude plugin install update-all-plugins@cc-update-all --scope user
 |------|----------|
 | (default) | Update all git marketplaces with installed plugins |
 | `--dry-run` | Show what would change, don't execute |
+| `--check` | Check which are behind (exit 1 if outdated, 0 if current) |
 | `--only NAME` | Update only the named marketplace |
 | `--json` | Output summary as JSON |
 | `--force` | Proceed even with dirty git repos |

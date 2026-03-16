@@ -1,6 +1,6 @@
 ---
 description: Update all installed plugin marketplaces
-argument-hint: [--dry-run] [--only NAME] [--json] [--force]
+argument-hint: [--dry-run] [--check] [--only NAME] [--json] [--force]
 allowed-tools: Bash
 ---
 
