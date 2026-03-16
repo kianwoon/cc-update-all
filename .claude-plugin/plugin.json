@@ -1,9 +1,0 @@
-{
-  "name": "cc-update-all",
-  "version": "0.1.0",
-  "description": "Bulk-update all installed Claude Code plugin marketplaces",
-  "author": {
-    "name": "kianwoonwong"
-  },
-  "keywords": ["update", "plugins", "marketplace", "maintenance"]
-}

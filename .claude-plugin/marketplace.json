@@ -1,0 +1,30 @@
+{
+  "name": "cc-update-all",
+  "owner": {
+    "name": "kianwoonwong",
+    "email": "kianwoonwong@users.noreply.github.com"
+  },
+  "metadata": {
+    "description": "Claude Code plugin for bulk-updating installed plugin marketplaces",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "cc-update-all",
+      "source": "./",
+      "description": "Bulk-update all installed Claude Code plugin marketplaces via /cc-update-all slash command",
+      "version": "0.1.0",
+      "author": {
+        "name": "kianwoonwong"
+      },
+      "category": "productivity",
+      "keywords": [
+        "update",
+        "plugins",
+        "marketplace",
+        "maintenance",
+        "bulk"
+      ]
+    }
+  ]
+}

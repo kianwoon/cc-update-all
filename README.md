@@ -4,12 +4,13 @@ Bulk-update all installed Claude Code plugin marketplaces from within the CLI.
 
 ## Installation
 
-1. Register as a local plugin:
-   ```
-   claude plugins add --path /path/to/cc-update-all
-   ```
+```bash
+# Add marketplace
+claude plugin marketplace add kianwoonwong/cc-update-all
 
-2. Or add to your local marketplace directory.
+# Install plugin
+claude plugin install cc-update-all@cc-update-all --scope user
+```
 
 ## Usage
 
