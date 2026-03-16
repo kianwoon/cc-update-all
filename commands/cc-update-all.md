@@ -6,10 +6,10 @@ allowed-tools: Bash
 
 Run the cc-update-all script to update all installed plugin marketplaces. The script discovers which marketplaces have installed plugins and only updates those.
 
-Execute the script with any user-provided arguments. IMPORTANT: Use `$CLAUDE_PLUGIN_ROOT` exactly as written below — it is an environment variable set by Claude Code. Do NOT replace it with a hardcoded path.
+Find the script in the plugin cache and execute it with any user-provided arguments. The script is located somewhere under `~/.claude/plugins/cache/` — use `find` to locate it if needed. Do NOT hardcode the cache path; discover it dynamically.
 
 ```bash
-bash "$CLAUDE_PLUGIN_ROOT/scripts/cc-update-all.sh" $ARGUMENTS
+find ~/.claude/plugins/cache -path "*/cc-update-all/cc-update-all/*/scripts/cc-update-all.sh" 2>/dev/null | head -1 | xargs -I{} bash {} $ARGUMENTS
 ```
 
 After the script completes, present the summary output to the user in a clean format. If the output contains a summary table, display it as-is. If the output is JSON (when --json flag is used), format it as a readable summary table instead.
