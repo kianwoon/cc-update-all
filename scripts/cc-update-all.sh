@@ -653,6 +653,24 @@ main() {
     print_summary_text
   fi
 
+  # Step 5: Auto-reinstall if this plugin's own marketplace was updated
+  # The plugin cache is a separate copy from the marketplace repo.
+  # After git pull, the cache may be stale — reinstalling refreshes it.
+  if [[ "$_DRY_RUN" -eq 0 ]] && [[ "$_CHECK_MODE" -eq 0 ]] && [[ "$_JSON_MODE" -eq 0 ]]; then
+    local self_status
+    self_status=$(get_mp_field "cc-update-all" 0 2>/dev/null || true)
+    if [[ "$self_status" == "updated" ]]; then
+      echo ""
+      info "This plugin was updated. Refreshing cache..."
+      if claude plugin install update-all-plugins@cc-update-all --scope user 2>/dev/null; then
+        ok "Plugin cache refreshed. /reload-plugins to activate."
+      else
+        warn "Auto-reinstall failed. Run manually:"
+        dim "  claude plugin install update-all-plugins@cc-update-all --scope user"
+      fi
+    fi
+  fi
+
   # Exit code
   if check_partial_failure; then
     exit 1
