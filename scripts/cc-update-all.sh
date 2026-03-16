@@ -662,7 +662,7 @@ main() {
     if [[ "$self_status" == "updated" ]]; then
       echo ""
       info "This plugin was updated. Refreshing cache..."
-      if claude plugin install update-all-plugins@cc-update-all --scope user 2>/dev/null; then
+      if claude plugin install update-all-plugins@cc-update-all --scope user --force 2>&1; then
         ok "Plugin cache refreshed. /reload-plugins to activate."
       else
         warn "Auto-reinstall failed. Run manually:"
