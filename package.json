@@ -4,7 +4,7 @@
   "private": true,
   "description": "Bulk-update Claude Code plugin marketplaces and MCP servers",
   "scripts": {
-    "test": "node --test scripts-mcp/lib/npm-resolver.test.js scripts-mcp/lib/config-io.test.js scripts-mcp/lib/tools/cursor.test.js scripts-mcp/lib/tools/cline.test.js scripts-mcp/lib/tools/roo-code.test.js scripts-mcp/lib/registry.test.js scripts-mcp/lib/reporter.test.js scripts-mcp/update-mcp.test.js",
+    "test": "node --test scripts-mcp/lib/npm-resolver.test.js scripts-mcp/lib/config-io.test.js scripts-mcp/lib/tools/cursor.test.js scripts-mcp/lib/tools/cline.test.js scripts-mcp/lib/tools/roo-code.test.js scripts-mcp/lib/registry.test.js scripts-mcp/lib/reporter.test.js scripts-mcp/lib/marketplace-resolver.test.js scripts-mcp/lib/tools/cursor-extensions.test.js scripts-mcp/lib/tools/windsurf-extensions.test.js scripts-mcp/update-mcp.test.js scripts-mcp/update-extensions.test.js",
     "test:mcp": "node --test scripts-mcp/**/*.test.js"
   },
   "engines": {
