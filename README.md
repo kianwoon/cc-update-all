@@ -18,6 +18,8 @@ It's also useful for multi-machine setups — keep your plugins and MCP servers 
 
 ## Installation
 
+### Claude Code (Plugin)
+
 ```bash
 # Add marketplace
 claude plugin marketplace add kianwoon/cc-update-all
@@ -25,6 +27,27 @@ claude plugin marketplace add kianwoon/cc-update-all
 # Install plugin
 claude plugin install update-all-plugins@cc-update-all --scope user
 ```
+
+### Other Tools (Git Clone)
+
+The MCP and extension check scripts work standalone from any terminal. Requires Node.js >= 18.
+
+```bash
+git clone https://github.com/kianwoon/cc-update-all.git
+cd cc-update-all
+
+# Check MCP server versions
+node scripts-mcp/update-mcp.js
+
+# Check extension versions
+node scripts-mcp/update-extensions.js
+
+# See all flags
+node scripts-mcp/update-mcp.js --help
+node scripts-mcp/update-extensions.js --help
+```
+
+The plugin marketplace update (`cc-update-all.sh`) is Claude Code-specific. The MCP and extension features work across all supported tools regardless of how they're installed.
 
 ## Usage — Plugin Marketplaces
 
