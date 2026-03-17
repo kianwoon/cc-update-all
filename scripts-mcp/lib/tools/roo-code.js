@@ -3,42 +3,42 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
-const { readConfig, writeConfig } = require('../config-io');
+
+const CONFIG_PATH = path.join(
+  os.homedir(),
+  'Library',
+  'Application Support',
+  'Code',
+  'User',
+  'globalStorage',
+  'rooveterinaryinc.roo-cline',
+  'settings',
+  'mcp_settings.json'
+);
 
 // -------------------------------------------------------
-// Config path
+// Extra fields that Roo Code uses beyond the basic MCP server config.
+// These must be preserved during round-trip parse/write.
 // -------------------------------------------------------
 
-/**
- * Returns the full path to the Roo Code MCP settings file.
- * Config: ~/Library/Application Support/Code/User/globalStorage/rooveterinaryinc.roo-cline/settings/mcp_settings.json
- */
-function getConfigPath() {
-  return path.join(
-    os.homedir(),
-    'Library',
-    'Application Support',
-    'Code',
-    'User',
-    'globalStorage',
-    'rooveterinaryinc.roo-cline',
-    'settings',
-    'mcp_settings.json'
-  );
-}
+const EXTRA_FIELDS = ['timeout', 'type', 'disabled', 'alwaysAllow'];
 
 // -------------------------------------------------------
 // discover()
 // -------------------------------------------------------
 
 /**
- * Checks whether the Roo Code MCP config file exists.
+ * Discovers the Roo Code MCP config file.
  *
- * @returns {string | null} The config path if the file exists, otherwise null.
+ * @returns {string | null} Absolute config path if the file exists, otherwise null.
  */
 function discover() {
-  const configPath = getConfigPath();
-  return fs.existsSync(configPath) ? configPath : null;
+  try {
+    fs.accessSync(CONFIG_PATH, fs.constants.R_OK);
+    return CONFIG_PATH;
+  } catch (_) {
+    return null;
+  }
 }
 
 // -------------------------------------------------------
@@ -46,46 +46,46 @@ function discover() {
 // -------------------------------------------------------
 
 /**
- * Parses the mcpServers object from Roo Code's config JSON.
- * Returns an array of { key, command, args, env, timeout, type, disabled, alwaysAllow }
- * entries. Unknown server fields are preserved via spread so round-trips don't lose data.
+ * Parses MCP server entries from a Roo Code config object, including all extra fields.
  *
- * @param {string} configPath - Path to the config file (used for error messages).
- * @param {object} rawJson   - The parsed JSON object (the entire file content).
- * @returns {Array<{ key: string, command: string, args: string[], env: object,
- *                    timeout: number, type: string, disabled: boolean,
- *                    alwaysAllow: string[], _raw?: object }>}
+ * @param {string} _configPath - Config file path (unused directly; rawJson is already parsed).
+ * @param {object} rawJson - The parsed JSON content of the Roo Code config file.
+ * @returns {Array<{ key: string, command: string, args: string[], env?: object, timeout?: number, type?: string, disabled?: boolean, alwaysAllow?: string[] }>}
  */
-function parseMcpServers(configPath, rawJson) {
-  if (!rawJson || typeof rawJson !== 'object') {
-    throw new Error(`invalid config (not an object): ${configPath}`);
-  }
-
-  const mcpServers = rawJson.mcpServers;
+function parseMcpServers(_configPath, rawJson) {
+  const mcpServers = rawJson && rawJson.mcpServers;
   if (!mcpServers || typeof mcpServers !== 'object') {
     return [];
   }
 
-  const servers = [];
-  for (const [key, server] of Object.entries(mcpServers)) {
-    if (!server || typeof server !== 'object') {
+  const result = [];
+  for (const [key, serverConfig] of Object.entries(mcpServers)) {
+    if (!serverConfig || typeof serverConfig !== 'object') {
       continue;
     }
+
     const entry = {
       key,
-      command: server.command || '',
-      args: Array.isArray(server.args) ? server.args : [],
-      env: server.env && typeof server.env === 'object' ? { ...server.env } : {},
-      timeout: server.timeout != null ? server.timeout : null,
-      type: server.type || 'stdio',
-      disabled: server.disabled === true,
-      alwaysAllow: Array.isArray(server.alwaysAllow) ? [...server.alwaysAllow] : [],
+      command: serverConfig.command,
+      args: serverConfig.args,
     };
-    Object.defineProperty(entry, '_raw', { value: server, enumerable: false });
-    servers.push(entry);
+
+    // Include env if present
+    if ('env' in serverConfig) {
+      entry.env = serverConfig.env;
+    }
+
+    // Include all Roo Code extra fields if present
+    for (const field of EXTRA_FIELDS) {
+      if (field in serverConfig) {
+        entry[field] = serverConfig[field];
+      }
+    }
+
+    result.push(entry);
   }
 
-  return servers;
+  return result;
 }
 
 // -------------------------------------------------------
@@ -93,28 +93,37 @@ function parseMcpServers(configPath, rawJson) {
 // -------------------------------------------------------
 
 /**
- * Wraps an array of parsed server entries back into Roo Code's config schema
- * and writes it to the config file.
+ * Wraps an array of server entries into the Roo Code MCP config schema.
+ * Receives the COMPLETE array (both updated and unchanged entries).
+ * Extra fields from parseMcpServers() are preserved in output.
  *
- * @param {Array<{ key: string, command: string, args: string[], env: object,
- *                  timeout: number, type: string, disabled: boolean,
- *                  alwaysAllow: string[], _raw?: object }>} servers
- * @returns {{ ok: true } | { ok: false, error: string }}
+ * @param {Array} servers - Complete array of server entries (output of parseMcpServers).
+ * @returns {{ mcpServers: { [key: string]: object } }}
  */
 function writeMcpServers(servers) {
   const mcpServers = {};
-  for (const entry of servers) {
-    const { key, _raw, ...knownFields } = entry;
-    if (_raw) {
-      mcpServers[key] = { ..._raw, ...knownFields };
-    } else {
-      mcpServers[key] = knownFields;
+  for (const server of servers) {
+    const { key, ...rest } = server;
+    mcpServers[key] = {};
+
+    // Always include core fields
+    mcpServers[key].command = rest.command;
+    mcpServers[key].args = rest.args;
+
+    // Include env if defined
+    if (rest.env !== undefined) {
+      mcpServers[key].env = rest.env;
+    }
+
+    // Include extra fields only if defined (no undefined pollution)
+    for (const field of EXTRA_FIELDS) {
+      if (rest[field] !== undefined) {
+        mcpServers[key][field] = rest[field];
+      }
     }
   }
 
-  const config = { mcpServers };
-  const configPath = module.exports.getConfigPath();
-  return writeConfig(configPath, config);
+  return { mcpServers };
 }
 
 // -------------------------------------------------------
@@ -126,5 +135,4 @@ module.exports = {
   discover,
   parseMcpServers,
   writeMcpServers,
-  getConfigPath, // exported for testing
 };

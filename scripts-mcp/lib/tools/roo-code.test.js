@@ -6,10 +6,6 @@ const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 
-// -------------------------------------------------------
-// Test helpers
-// -------------------------------------------------------
-
 const TMPDIR = fs.mkdtempSync(path.join(os.tmpdir(), 'roo-code-test-'));
 
 function tmpFile(name) {
@@ -26,274 +22,74 @@ function readRaw(filePath) {
 
 function cleanup() {
   for (const file of fs.readdirSync(TMPDIR)) {
-    try {
-      fs.unlinkSync(path.join(TMPDIR, file));
-    } catch (_) { /* best effort */ }
+    try { fs.unlinkSync(path.join(TMPDIR, file)); } catch (_) { /* best effort */ }
   }
 }
 
+const EXPECTED_CONFIG_PATH = path.join(
+  os.homedir(),
+  'Library',
+  'Application Support',
+  'Code',
+  'User',
+  'globalStorage',
+  'rooveterinaryinc.roo-cline',
+  'settings',
+  'mcp_settings.json'
+);
+
 // -------------------------------------------------------
-// getConfigPath
+// discover() tests
 // -------------------------------------------------------
 
-describe('getConfigPath', () => {
-  it('returns the correct Roo Code config path', () => {
-    const { getConfigPath } = require('./roo-code.js');
-    const expected = path.join(
-      os.homedir(),
-      'Library',
-      'Application Support',
-      'Code',
-      'User',
-      'globalStorage',
-      'rooveterinaryinc.roo-cline',
-      'settings',
-      'mcp_settings.json'
-    );
-    assert.equal(getConfigPath(), expected);
+describe('roo-code discover()', () => {
+  it('returns configPath when file exists', () => {
+    // Ensure the directory and file exist at the real Roo Code path
+    fs.mkdirSync(path.dirname(EXPECTED_CONFIG_PATH), { recursive: true });
+    writeRaw(EXPECTED_CONFIG_PATH, JSON.stringify({ mcpServers: {} }, null, 2));
+
+    delete require.cache[require.resolve('./roo-code.js')];
+    const rooCode = require('./roo-code.js');
+    const result = rooCode.discover();
+
+    assert.equal(result, EXPECTED_CONFIG_PATH);
+
+    // Cleanup
+    try { fs.unlinkSync(EXPECTED_CONFIG_PATH); } catch (_) { /* best effort */ }
+    try { fs.rmdirSync(path.dirname(EXPECTED_CONFIG_PATH)); } catch (_) { /* best effort */ }
+    try { fs.rmdirSync(path.dirname(path.dirname(EXPECTED_CONFIG_PATH))); } catch (_) { /* best effort */ }
   });
 
-  it('contains rooveterinaryinc.roo-cline in the path', () => {
-    const { getConfigPath } = require('./roo-code.js');
-    assert.ok(getConfigPath().includes('rooveterinaryinc.roo-cline'));
-  });
+  it('returns null when file does not exist', () => {
+    let renamed = false;
+    if (fs.existsSync(EXPECTED_CONFIG_PATH)) {
+      const bakPath = EXPECTED_CONFIG_PATH + '.testbak';
+      fs.renameSync(EXPECTED_CONFIG_PATH, bakPath);
+      renamed = true;
+    }
 
-  it('uses mcp_settings.json as the filename', () => {
-    const { getConfigPath } = require('./roo-code.js');
-    assert.ok(getConfigPath().endsWith('mcp_settings.json'));
+    try {
+      delete require.cache[require.resolve('./roo-code.js')];
+      const rooCode = require('./roo-code.js');
+      const result = rooCode.discover();
+
+      assert.equal(result, null);
+    } finally {
+      if (renamed) {
+        const bakPath = EXPECTED_CONFIG_PATH + '.testbak';
+        try { fs.renameSync(bakPath, EXPECTED_CONFIG_PATH); } catch (_) { /* best effort */ }
+      }
+    }
   });
 });
 
 // -------------------------------------------------------
-// discover
+// parseMcpServers() tests
 // -------------------------------------------------------
 
-describe('discover', () => {
-  beforeEach(() => cleanup());
-  afterEach(() => cleanup());
-
-  it('returns configPath when the Roo Code config file exists', () => {
-    const configPath = tmpFile('mcp_settings.json');
-    writeRaw(configPath, JSON.stringify({ mcpServers: {} }, null, 2));
-
-    // We need to test discover() against a file that exists.
-    // Since discover() hardcodes the path via getConfigPath(), we test it
-    // by verifying the function checks for existence correctly.
-    // For a realistic test, we verify fs.existsSync behavior with our temp file.
-    const { getConfigPath } = require('./roo-code.js');
-    const realPath = getConfigPath();
-
-    // Verify the function uses fs.existsSync correctly by testing with a known file
-    const { discover } = require('./roo-code.js');
-    // The real config path likely doesn't exist in CI/test, so discover() should
-    // return null for the real path. We verify the temp file exists though.
-    assert.ok(fs.existsSync(configPath), 'test fixture should exist');
-    assert.equal(typeof discover(), 'string' || discover() === null, 'discover should return string or null');
-  });
-
-  it('returns null when the config file does not exist', () => {
-    // Use a path we know doesn't exist
-    const nonExistent = path.join(TMPDIR, 'does_not_exist', 'mcp_settings.json');
-    assert.ok(!fs.existsSync(nonExistent));
-
-    // Verify discover returns null by checking fs.existsSync on non-existent path
-    assert.equal(fs.existsSync(nonExistent), false);
-  });
-});
-
-// -------------------------------------------------------
-// parseMcpServers
-// -------------------------------------------------------
-
-describe('parseMcpServers', () => {
-  it('extracts all fields from a standard server entry', () => {
-    const { parseMcpServers } = require('./roo-code.js');
+describe('roo-code parseMcpServers()', () => {
+  it('extracts all fields including extras (timeout, type, disabled, alwaysAllow)', () => {
     const rawJson = {
-      mcpServers: {
-        anthropic: {
-          command: 'npx',
-          args: ['-y', '@anthropic/mcp-server@1.2.3'],
-          env: { API_KEY: 'test-key' },
-          timeout: 60,
-          type: 'stdio',
-          disabled: false,
-          alwaysAllow: ['tool1', 'tool2'],
-        },
-      },
-    };
-
-    const servers = parseMcpServers('/test/path.json', rawJson);
-    assert.equal(servers.length, 1);
-
-    const s = servers[0];
-    assert.equal(s.key, 'anthropic');
-    assert.equal(s.command, 'npx');
-    assert.deepStrictEqual(s.args, ['-y', '@anthropic/mcp-server@1.2.3']);
-    assert.deepStrictEqual(s.env, { API_KEY: 'test-key' });
-    assert.equal(s.timeout, 60);
-    assert.equal(s.type, 'stdio');
-    assert.equal(s.disabled, false);
-    assert.deepStrictEqual(s.alwaysAllow, ['tool1', 'tool2']);
-  });
-
-  it('extracts extra fields like timeout, type, disabled, and alwaysAllow', () => {
-    const { parseMcpServers } = require('./roo-code.js');
-    const rawJson = {
-      mcpServers: {
-        myserver: {
-          command: 'node',
-          args: ['server.js'],
-          env: {},
-          timeout: 120,
-          type: 'sse',
-          disabled: true,
-          alwaysAllow: ['read', 'write', 'execute'],
-        },
-      },
-    };
-
-    const servers = parseMcpServers('/test/path.json', rawJson);
-    const s = servers[0];
-    assert.equal(s.key, 'myserver');
-    assert.equal(s.timeout, 120);
-    assert.equal(s.type, 'sse');
-    assert.equal(s.disabled, true);
-    assert.deepStrictEqual(s.alwaysAllow, ['read', 'write', 'execute']);
-  });
-
-  it('handles missing optional fields with defaults', () => {
-    const { parseMcpServers } = require('./roo-code.js');
-    const rawJson = {
-      mcpServers: {
-        minimal: {
-          command: 'echo',
-        },
-      },
-    };
-
-    const servers = parseMcpServers('/test/path.json', rawJson);
-    const s = servers[0];
-    assert.equal(s.key, 'minimal');
-    assert.equal(s.command, 'echo');
-    assert.deepStrictEqual(s.args, []);
-    assert.deepStrictEqual(s.env, {});
-    assert.equal(s.timeout, null);
-    assert.equal(s.type, 'stdio');
-    assert.equal(s.disabled, false);
-    assert.deepStrictEqual(s.alwaysAllow, []);
-  });
-
-  it('returns empty array when mcpServers is missing', () => {
-    const { parseMcpServers } = require('./roo-code.js');
-    const servers = parseMcpServers('/test/path.json', {});
-    assert.deepStrictEqual(servers, []);
-  });
-
-  it('returns empty array when mcpServers is null', () => {
-    const { parseMcpServers } = require('./roo-code.js');
-    const servers = parseMcpServers('/test/path.json', { mcpServers: null });
-    assert.deepStrictEqual(servers, []);
-  });
-
-  it('throws for non-object rawJson', () => {
-    const { parseMcpServers } = require('./roo-code.js');
-    assert.throws(
-      () => parseMcpServers('/test/path.json', 'not an object'),
-      /invalid config/
-    );
-  });
-
-  it('throws for null rawJson', () => {
-    const { parseMcpServers } = require('./roo-code.js');
-    assert.throws(
-      () => parseMcpServers('/test/path.json', null),
-      /invalid config/
-    );
-  });
-
-  it('skips non-object server entries', () => {
-    const { parseMcpServers } = require('./roo-code.js');
-    const rawJson = {
-      mcpServers: {
-        valid: { command: 'echo' },
-        invalid: 'not-an-object',
-        alsoValid: { command: 'node', args: [] },
-      },
-    };
-
-    const servers = parseMcpServers('/test/path.json', rawJson);
-    assert.equal(servers.length, 2);
-    assert.equal(servers[0].key, 'valid');
-    assert.equal(servers[1].key, 'alsoValid');
-  });
-
-  it('preserves _raw reference for round-trip support (non-enumerable)', () => {
-    const { parseMcpServers } = require('./roo-code.js');
-    const serverDef = {
-      command: 'npx',
-      args: ['-y', 'pkg@1.0.0'],
-      env: {},
-      timeout: 30,
-      type: 'stdio',
-      disabled: false,
-      alwaysAllow: [],
-    };
-    const rawJson = { mcpServers: { myserver: serverDef } };
-
-    const servers = parseMcpServers('/test/path.json', rawJson);
-    // _raw should still be accessible but not enumerable
-    assert.strictEqual(servers[0]._raw, serverDef);
-    assert.deepStrictEqual(Object.keys(servers[0]).sort(), ['alwaysAllow', 'args', 'command', 'disabled', 'env', 'key', 'timeout', 'type']);
-  });
-
-  it('handles multiple server entries', () => {
-    const { parseMcpServers } = require('./roo-code.js');
-    const rawJson = {
-      mcpServers: {
-        server1: { command: 'npx', args: ['-y', 'pkg1@1.0.0'], env: {}, timeout: 60, type: 'stdio', disabled: false, alwaysAllow: ['a'] },
-        server2: { command: 'node', args: ['index.js'], env: { PORT: '3000' }, timeout: 30, type: 'sse', disabled: true, alwaysAllow: [] },
-        server3: { command: 'python', args: ['-m', 'server'], env: {}, timeout: null, type: 'stdio', disabled: false, alwaysAllow: ['b', 'c'] },
-      },
-    };
-
-    const servers = parseMcpServers('/test/path.json', rawJson);
-    assert.equal(servers.length, 3);
-    assert.equal(servers[0].key, 'server1');
-    assert.equal(servers[1].key, 'server2');
-    assert.equal(servers[2].key, 'server3');
-  });
-});
-
-// -------------------------------------------------------
-// writeMcpServers (uses writeConfig — tested via mock path)
-// -------------------------------------------------------
-
-describe('writeMcpServers', () => {
-  beforeEach(() => cleanup());
-  afterEach(() => cleanup());
-
-  it('wraps servers in the correct Roo Code schema', () => {
-    // Instead of mocking the file system, we test the schema construction
-    // by intercepting writeConfig.
-    // writeMcpServers calls writeConfig(getConfigPath(), { mcpServers: {...} })
-    // We can verify by writing to a temp path via a different approach:
-    // build the expected output manually and compare schema structure.
-
-    const servers = [
-      {
-        key: 'anthropic',
-        command: 'npx',
-        args: ['-y', '@anthropic/mcp-server@1.2.3'],
-        env: { API_KEY: 'test' },
-        timeout: 60,
-        type: 'stdio',
-        disabled: false,
-        alwaysAllow: ['tool1', 'tool2'],
-      },
-    ];
-
-    // Build expected schema manually
-    const expected = {
       mcpServers: {
         anthropic: {
           command: 'npx',
@@ -307,229 +103,337 @@ describe('writeMcpServers', () => {
       },
     };
 
-    // Write to a temp file via writeConfig directly to verify schema
-    const { writeConfig } = require('../config-io.js');
-    const tmpPath = tmpFile('write-schema-test.json');
+    delete require.cache[require.resolve('./roo-code.js')];
+    const rooCode = require('./roo-code.js');
+    const result = rooCode.parseMcpServers('/some/path', rawJson);
 
-    // Build the same structure writeMcpServers would
-    const mcpServers = {};
-    for (const entry of servers) {
-      mcpServers[entry.key] = {
-        command: entry.command,
-        args: entry.args,
-        env: entry.env,
-        timeout: entry.timeout,
-        type: entry.type,
-        disabled: entry.disabled,
-        alwaysAllow: entry.alwaysAllow,
-      };
-    }
-    const config = { mcpServers };
-
-    const result = writeConfig(tmpPath, config);
-    assert.equal(result.ok, true);
-
-    const written = JSON.parse(readRaw(tmpPath));
-    assert.deepStrictEqual(written, expected);
+    assert.equal(result.length, 1);
+    const entry = result[0];
+    assert.equal(entry.key, 'anthropic');
+    assert.equal(entry.command, 'npx');
+    assert.deepStrictEqual(entry.args, ['-y', '@anthropic/mcp-server@1.2.3']);
+    assert.deepStrictEqual(entry.env, { API_KEY: 'test' });
+    assert.equal(entry.timeout, 60);
+    assert.equal(entry.type, 'stdio');
+    assert.equal(entry.disabled, false);
+    assert.deepStrictEqual(entry.alwaysAllow, ['tool1', 'tool2']);
   });
 
-  it('writes to the correct Roo Code config path', () => {
-    const { getConfigPath } = require('./roo-code.js');
-    const p = getConfigPath();
-    assert.ok(p.includes('rooveterinaryinc.roo-cline'), 'path should contain Roo Code extension ID');
-    assert.ok(p.endsWith('mcp_settings.json'), 'filename should be mcp_settings.json');
-  });
-
-  it('handles an empty servers array', () => {
-    const { writeConfig } = require('../config-io.js');
-    const tmpPath = tmpFile('empty-servers.json');
-
-    const config = { mcpServers: {} };
-    const result = writeConfig(tmpPath, config);
-    assert.equal(result.ok, true);
-
-    const written = JSON.parse(readRaw(tmpPath));
-    assert.deepStrictEqual(written, { mcpServers: {} });
-  });
-
-  it('directly calls writeMcpServers and produces correct output schema', () => {
-    // Patch getConfigPath to write to a temp file
-    const mod = require('./roo-code.js');
-    const tmpPath = tmpFile('direct-write-test.json');
-    const origGetConfigPath = mod.getConfigPath;
-    mod.getConfigPath = () => tmpPath;
-
-    try {
-      const servers = [
-        {
-          key: 'test-server',
+  it('handles servers missing some extra fields (does not crash)', () => {
+    const rawJson = {
+      mcpServers: {
+        minimal: {
+          command: 'node',
+          args: ['server.js'],
+        },
+        partial: {
           command: 'npx',
-          args: ['-y', 'pkg@1.0.0'],
-          env: { KEY: 'val' },
-          timeout: 60,
-          type: 'stdio',
-          disabled: false,
-          alwaysAllow: ['tool1'],
+          args: ['-y', 'some-pkg'],
+          timeout: 30,
+          disabled: true,
         },
-      ];
+      },
+    };
 
-      const result = mod.writeMcpServers(servers);
-      assert.equal(result.ok, true);
+    delete require.cache[require.resolve('./roo-code.js')];
+    const rooCode = require('./roo-code.js');
+    const result = rooCode.parseMcpServers('/some/path', rawJson);
 
-      const written = JSON.parse(readRaw(tmpPath));
-      assert.ok(written.mcpServers, 'output should have mcpServers key');
-      assert.ok(written.mcpServers['test-server'], 'output should have server entry');
-      const entry = written.mcpServers['test-server'];
-      assert.equal(entry.command, 'npx');
-      assert.deepStrictEqual(entry.args, ['-y', 'pkg@1.0.0']);
-      assert.deepStrictEqual(entry.env, { KEY: 'val' });
-      assert.equal(entry.timeout, 60);
-      assert.equal(entry.type, 'stdio');
-      assert.equal(entry.disabled, false);
-      assert.deepStrictEqual(entry.alwaysAllow, ['tool1']);
-    } finally {
-      mod.getConfigPath = origGetConfigPath;
-    }
+    assert.equal(result.length, 2);
+
+    // Minimal server: extra fields should be undefined
+    const minimal = result.find((s) => s.key === 'minimal');
+    assert.equal(minimal.command, 'node');
+    assert.deepStrictEqual(minimal.args, ['server.js']);
+    assert.equal(minimal.timeout, undefined);
+    assert.equal(minimal.type, undefined);
+    assert.equal(minimal.disabled, undefined);
+    assert.equal(minimal.alwaysAllow, undefined);
+    assert.equal(minimal.env, undefined);
+
+    // Partial server: only specified extras present
+    const partial = result.find((s) => s.key === 'partial');
+    assert.equal(partial.command, 'npx');
+    assert.equal(partial.timeout, 30);
+    assert.equal(partial.disabled, true);
+    assert.equal(partial.type, undefined);
+    assert.equal(partial.alwaysAllow, undefined);
   });
 
-  it('preserves unknown fields via _raw during write', () => {
-    // Parse a config with an unknown field, then write it back and verify
-    const { parseMcpServers, writeMcpServers } = require('./roo-code.js');
-    const tmpPath = tmpFile('unknown-fields-test.json');
-    const origGetConfigPath = require('./roo-code.js').getConfigPath;
-    require('./roo-code.js').getConfigPath = () => tmpPath;
+  it('handles empty mcpServers object', () => {
+    const rawJson = { mcpServers: {} };
 
-    try {
-      const rawJson = {
-        mcpServers: {
-          futureServer: {
-            command: 'node',
-            args: ['server.js'],
-            env: {},
-            timeout: 30,
-            type: 'stdio',
-            disabled: false,
-            alwaysAllow: [],
-            // Unknown / forward-compat field
-            futureOption: true,
-            customMeta: { version: 2, experimental: true },
-          },
-        },
-      };
+    delete require.cache[require.resolve('./roo-code.js')];
+    const rooCode = require('./roo-code.js');
+    const result = rooCode.parseMcpServers('/some/path', rawJson);
 
-      const servers = parseMcpServers('/test/path.json', rawJson);
-      assert.equal(servers.length, 1);
+    assert.equal(result.length, 0);
+    assert.ok(Array.isArray(result));
+  });
 
-      // _raw is non-enumerable so it won't appear in JSON.stringify or spread from Object.keys
-      const result = writeMcpServers(servers);
-      assert.equal(result.ok, true);
+  it('returns empty array for missing mcpServers key', () => {
+    const rawJson = {};
 
-      const written = JSON.parse(readRaw(tmpPath));
-      const entry = written.mcpServers['futureServer'];
+    delete require.cache[require.resolve('./roo-code.js')];
+    const rooCode = require('./roo-code.js');
+    const result = rooCode.parseMcpServers('/some/path', rawJson);
 
-      // Known fields
-      assert.equal(entry.command, 'node');
-      assert.deepStrictEqual(entry.args, ['server.js']);
-      assert.equal(entry.timeout, 30);
-      assert.equal(entry.type, 'stdio');
-      assert.equal(entry.disabled, false);
-      assert.deepStrictEqual(entry.alwaysAllow, []);
+    assert.equal(result.length, 0);
+  });
 
-      // Unknown fields preserved from _raw
-      assert.equal(entry.futureOption, true, 'unknown field futureOption should be preserved');
-      assert.deepStrictEqual(entry.customMeta, { version: 2, experimental: true }, 'unknown field customMeta should be preserved');
-    } finally {
-      require('./roo-code.js').getConfigPath = origGetConfigPath;
-    }
+  it('returns empty array for null mcpServers', () => {
+    const rawJson = { mcpServers: null };
+
+    delete require.cache[require.resolve('./roo-code.js')];
+    const rooCode = require('./roo-code.js');
+    const result = rooCode.parseMcpServers('/some/path', rawJson);
+
+    assert.equal(result.length, 0);
+  });
+
+  it('returns empty array for non-object rawJson', () => {
+    delete require.cache[require.resolve('./roo-code.js')];
+    const rooCode = require('./roo-code.js');
+    const result = rooCode.parseMcpServers('/some/path', null);
+
+    assert.equal(result.length, 0);
+  });
+
+  it('skips non-object server entries', () => {
+    const rawJson = {
+      mcpServers: {
+        valid: { command: 'echo' },
+        invalid: 'not-an-object',
+        alsoValid: { command: 'node', args: [] },
+      },
+    };
+
+    delete require.cache[require.resolve('./roo-code.js')];
+    const rooCode = require('./roo-code.js');
+    const result = rooCode.parseMcpServers('/some/path', rawJson);
+
+    assert.equal(result.length, 2);
+    assert.equal(result[0].key, 'valid');
+    assert.equal(result[1].key, 'alsoValid');
+  });
+
+  it('handles multiple server entries', () => {
+    const rawJson = {
+      mcpServers: {
+        server1: { command: 'npx', args: ['-y', 'pkg1@1.0.0'], env: {}, timeout: 60, type: 'stdio', disabled: false, alwaysAllow: ['a'] },
+        server2: { command: 'node', args: ['index.js'], env: { PORT: '3000' }, timeout: 30, type: 'sse', disabled: true, alwaysAllow: [] },
+        server3: { command: 'python', args: ['-m', 'server'], env: {}, timeout: null, type: 'stdio', disabled: false, alwaysAllow: ['b', 'c'] },
+      },
+    };
+
+    delete require.cache[require.resolve('./roo-code.js')];
+    const rooCode = require('./roo-code.js');
+    const result = rooCode.parseMcpServers('/some/path', rawJson);
+
+    assert.equal(result.length, 3);
+    assert.equal(result[0].key, 'server1');
+    assert.equal(result[1].key, 'server2');
+    assert.equal(result[2].key, 'server3');
   });
 });
 
 // -------------------------------------------------------
-// Round-trip: parse -> write -> parse preserves all fields
+// writeMcpServers() tests
 // -------------------------------------------------------
 
-describe('round-trip preservation', () => {
-  beforeEach(() => cleanup());
-  afterEach(() => cleanup());
+describe('roo-code writeMcpServers()', () => {
+  it('wraps in Roo Code schema preserving all extra fields', () => {
+    const p = tmpFile('roo-write-full.json');
+    const servers = [
+      {
+        key: 'anthropic',
+        command: 'npx',
+        args: ['-y', '@anthropic/mcp-server@1.2.3'],
+        env: { API_KEY: 'test' },
+        timeout: 60,
+        type: 'stdio',
+        disabled: false,
+        alwaysAllow: ['tool1', 'tool2'],
+      },
+    ];
 
-  it('preserves all extra fields through parse-write-parse cycle', () => {
-    const { parseMcpServers } = require('./roo-code.js');
-    const { writeConfig, readConfig } = require('../config-io.js');
-    const tmpPath = tmpFile('round-trip.json');
+    delete require.cache[require.resolve('./roo-code.js')];
+    const rooCode = require('./roo-code.js');
+    const configObj = rooCode.writeMcpServers(servers);
 
-    // Original config with all Roo Code fields
-    const original = {
+    // writeMcpServers returns a plain object (not written to disk)
+    assert.ok(configObj.mcpServers, 'should have mcpServers key');
+    assert.ok(configObj.mcpServers.anthropic, 'should have server entry');
+
+    const server = configObj.mcpServers.anthropic;
+    assert.equal(server.command, 'npx');
+    assert.deepStrictEqual(server.args, ['-y', '@anthropic/mcp-server@1.2.3']);
+    assert.deepStrictEqual(server.env, { API_KEY: 'test' });
+    assert.equal(server.timeout, 60);
+    assert.equal(server.type, 'stdio');
+    assert.equal(server.disabled, false);
+    assert.deepStrictEqual(server.alwaysAllow, ['tool1', 'tool2']);
+
+    // Write to disk via config-io to verify it serializes correctly
+    const { writeConfig } = require('../config-io.js');
+    const writeResult = writeConfig(p, configObj);
+    assert.equal(writeResult.ok, true);
+
+    const written = JSON.parse(readRaw(p));
+    assert.deepStrictEqual(written, configObj);
+  });
+
+  it('writes only defined extra fields (no undefined pollution)', () => {
+    const p = tmpFile('roo-write-minimal.json');
+    const servers = [
+      {
+        key: 'minimal',
+        command: 'node',
+        args: ['server.js'],
+      },
+    ];
+
+    delete require.cache[require.resolve('./roo-code.js')];
+    const rooCode = require('./roo-code.js');
+    const configObj = rooCode.writeMcpServers(servers);
+
+    assert.ok(configObj.mcpServers);
+    const server = configObj.mcpServers.minimal;
+
+    assert.equal(server.command, 'node');
+    assert.deepStrictEqual(server.args, ['server.js']);
+    // Extra fields should NOT be present
+    assert.equal('timeout' in server, false, 'timeout should not be in output');
+    assert.equal('type' in server, false, 'type should not be in output');
+    assert.equal('disabled' in server, false, 'disabled should not be in output');
+    assert.equal('alwaysAllow' in server, false, 'alwaysAllow should not be in output');
+    assert.equal('env' in server, false, 'env should not be in output');
+  });
+
+  it('writes multiple servers', () => {
+    const p = tmpFile('roo-write-multi.json');
+    const servers = [
+      {
+        key: 'server-a',
+        command: 'npx',
+        args: ['-y', 'pkg-a@1.0.0'],
+        timeout: 30,
+        type: 'stdio',
+        disabled: true,
+        alwaysAllow: [],
+      },
+      {
+        key: 'server-b',
+        command: 'node',
+        args: ['server.js'],
+        timeout: 120,
+      },
+    ];
+
+    delete require.cache[require.resolve('./roo-code.js')];
+    const rooCode = require('./roo-code.js');
+    const configObj = rooCode.writeMcpServers(servers);
+
+    assert.ok(configObj.mcpServers['server-a']);
+    assert.ok(configObj.mcpServers['server-b']);
+
+    assert.equal(configObj.mcpServers['server-a'].timeout, 30);
+    assert.equal(configObj.mcpServers['server-a'].disabled, true);
+    assert.deepStrictEqual(configObj.mcpServers['server-a'].alwaysAllow, []);
+
+    assert.equal(configObj.mcpServers['server-b'].timeout, 120);
+    assert.equal('disabled' in configObj.mcpServers['server-b'], false);
+  });
+
+  it('handles an empty servers array', () => {
+    delete require.cache[require.resolve('./roo-code.js')];
+    const rooCode = require('./roo-code.js');
+    const configObj = rooCode.writeMcpServers([]);
+
+    assert.deepStrictEqual(configObj, { mcpServers: {} });
+  });
+});
+
+// -------------------------------------------------------
+// Round-trip test
+// -------------------------------------------------------
+
+describe('roo-code round-trip', () => {
+  it('parse -> pass through -> write preserves all extra fields', () => {
+    const p = tmpFile('roo-roundtrip.json');
+
+    const originalConfig = {
       mcpServers: {
-        anthropic: {
+        'full-server': {
           command: 'npx',
           args: ['-y', '@anthropic/mcp-server@1.2.3'],
-          env: { API_KEY: 'sk-test' },
+          env: { ANTHROPIC_API_KEY: 'sk-test' },
           timeout: 60,
           type: 'stdio',
           disabled: false,
           alwaysAllow: ['tool1', 'tool2'],
         },
-        custom: {
+        'partial-server': {
           command: 'node',
           args: ['server.js'],
-          env: { PORT: '3000', DEBUG: 'true' },
-          timeout: 120,
-          type: 'sse',
+          timeout: 30,
           disabled: true,
-          alwaysAllow: ['read', 'write'],
+        },
+        'minimal-server': {
+          command: 'npx',
+          args: ['-y', 'minimal-pkg'],
         },
       },
     };
 
+    delete require.cache[require.resolve('./roo-code.js')];
+    const rooCode = require('./roo-code.js');
+
     // Parse
-    const parsed = parseMcpServers(tmpPath, original);
-    assert.equal(parsed.length, 2);
+    const parsed = rooCode.parseMcpServers(p, originalConfig);
 
-    // Rebuild config from parsed data (simulates writeMcpServers logic)
-    const rebuilt = { mcpServers: {} };
-    for (const entry of parsed) {
-      rebuilt.mcpServers[entry.key] = {
-        command: entry.command,
-        args: entry.args,
-        env: entry.env,
-        timeout: entry.timeout,
-        type: entry.type,
-        disabled: entry.disabled,
-        alwaysAllow: entry.alwaysAllow,
-      };
-    }
+    // Write back (returns object, not written to disk)
+    const configObj = rooCode.writeMcpServers(parsed);
 
-    // Write
-    const writeResult = writeConfig(tmpPath, rebuilt);
+    // Verify the object matches original
+    const originalServers = originalConfig.mcpServers;
+    const roundTrippedServers = configObj.mcpServers;
+
+    // Full server: all fields preserved
+    assert.deepStrictEqual(
+      roundTrippedServers['full-server'],
+      originalServers['full-server'],
+      'full-server should have identical round-trip'
+    );
+
+    // Partial server: all present fields preserved, absent fields stay absent
+    assert.deepStrictEqual(
+      roundTrippedServers['partial-server'],
+      originalServers['partial-server'],
+      'partial-server should have identical round-trip'
+    );
+
+    // Minimal server: only basic fields preserved
+    assert.deepStrictEqual(
+      roundTrippedServers['minimal-server'],
+      originalServers['minimal-server'],
+      'minimal-server should have identical round-trip'
+    );
+
+    // Also verify it serializes and reads back correctly via config-io
+    const { writeConfig, readConfig } = require('../config-io.js');
+    const writeResult = writeConfig(p, configObj);
     assert.equal(writeResult.ok, true);
 
-    // Read back
-    const readResult = readConfig(tmpPath);
+    const readResult = readConfig(p);
     assert.equal(readResult.ok, true);
-
-    // Parse again
-    const reparsed = parseMcpServers(tmpPath, readResult.data);
-    assert.equal(reparsed.length, 2);
-
-    // Verify all fields preserved
-    for (let i = 0; i < parsed.length; i++) {
-      assert.equal(reparsed[i].key, parsed[i].key, `key mismatch at index ${i}`);
-      assert.equal(reparsed[i].command, parsed[i].command, `command mismatch at index ${i}`);
-      assert.deepStrictEqual(reparsed[i].args, parsed[i].args, `args mismatch at index ${i}`);
-      assert.deepStrictEqual(reparsed[i].env, parsed[i].env, `env mismatch at index ${i}`);
-      assert.equal(reparsed[i].timeout, parsed[i].timeout, `timeout mismatch at index ${i}`);
-      assert.equal(reparsed[i].type, parsed[i].type, `type mismatch at index ${i}`);
-      assert.equal(reparsed[i].disabled, parsed[i].disabled, `disabled mismatch at index ${i}`);
-      assert.deepStrictEqual(reparsed[i].alwaysAllow, parsed[i].alwaysAllow, `alwaysAllow mismatch at index ${i}`);
-    }
+    assert.deepStrictEqual(readResult.data, configObj);
   });
 
   it('preserves env object entries through round-trip', () => {
-    const { parseMcpServers } = require('./roo-code.js');
-    const { writeConfig, readConfig } = require('../config-io.js');
-    const tmpPath = tmpFile('round-trip-env.json');
+    const p = tmpFile('roo-roundtrip-env.json');
 
-    const original = {
+    const originalConfig = {
       mcpServers: {
         server1: {
           command: 'npx',
@@ -547,32 +451,18 @@ describe('round-trip preservation', () => {
       },
     };
 
-    const parsed = parseMcpServers(tmpPath, original);
+    delete require.cache[require.resolve('./roo-code.js')];
+    const rooCode = require('./roo-code.js');
+
+    const parsed = rooCode.parseMcpServers(p, originalConfig);
     assert.deepStrictEqual(parsed[0].env, {
       KEY1: 'value1',
       KEY2: 'value2',
       KEY3: 'value with spaces',
     });
 
-    // Rebuild and round-trip
-    const rebuilt = { mcpServers: {} };
-    for (const entry of parsed) {
-      rebuilt.mcpServers[entry.key] = {
-        command: entry.command,
-        args: entry.args,
-        env: entry.env,
-        timeout: entry.timeout,
-        type: entry.type,
-        disabled: entry.disabled,
-        alwaysAllow: entry.alwaysAllow,
-      };
-    }
-
-    writeConfig(tmpPath, rebuilt);
-    const readResult = readConfig(tmpPath);
-    const reparsed = parseMcpServers(tmpPath, readResult.data);
-
-    assert.deepStrictEqual(reparsed[0].env, {
+    const configObj = rooCode.writeMcpServers(parsed);
+    assert.deepStrictEqual(configObj.mcpServers.server1.env, {
       KEY1: 'value1',
       KEY2: 'value2',
       KEY3: 'value with spaces',
@@ -586,27 +476,26 @@ describe('round-trip preservation', () => {
 
 describe('module exports', () => {
   it('exports name as "roo-code"', () => {
+    delete require.cache[require.resolve('./roo-code.js')];
     const mod = require('./roo-code.js');
     assert.equal(mod.name, 'roo-code');
   });
 
   it('exports discover as a function', () => {
+    delete require.cache[require.resolve('./roo-code.js')];
     const mod = require('./roo-code.js');
     assert.equal(typeof mod.discover, 'function');
   });
 
   it('exports parseMcpServers as a function', () => {
+    delete require.cache[require.resolve('./roo-code.js')];
     const mod = require('./roo-code.js');
     assert.equal(typeof mod.parseMcpServers, 'function');
   });
 
   it('exports writeMcpServers as a function', () => {
+    delete require.cache[require.resolve('./roo-code.js')];
     const mod = require('./roo-code.js');
     assert.equal(typeof mod.writeMcpServers, 'function');
-  });
-
-  it('exports getConfigPath as a function', () => {
-    const mod = require('./roo-code.js');
-    assert.equal(typeof mod.getConfigPath, 'function');
   });
 });
