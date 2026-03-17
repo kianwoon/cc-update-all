@@ -1,14 +1,15 @@
 # cc-update-all
 
-Bulk-update all installed Claude Code plugin marketplaces and MCP server versions from within the CLI.
+Bulk-update Claude Code plugin marketplaces, MCP server versions, and editor extensions from within the CLI.
 
 ## Why?
 
 Claude Code has no built-in command to update all your plugin marketplaces at once. Each marketplace must be refreshed individually — open settings, find the marketplace, click refresh, wait, repeat. When you have 5+ marketplaces installed, this gets tedious fast.
 
-**cc-update-all** solves this with two slash commands:
+**cc-update-all** solves this with three slash commands:
 - `/update-all-plugins` — one command, all marketplaces updated
 - `/update-mcp-servers` — one command, all pinned MCP server versions checked and updated
+- `/update-extensions` — one command, check which Cursor and Windsurf extensions are outdated
 
 It's also useful for multi-machine setups — keep your plugins and MCP servers in sync across machines without remembering which to refresh. Just run the commands and everything pulls the latest.
 
@@ -65,7 +66,7 @@ claude plugin install update-all-plugins@cc-update-all --scope user
 
 ### How It Works
 
-1. Discovers MCP configurations for Cursor, Cline, and Roo Code
+1. Discovers MCP configurations for [Cursor](https://cursor.sh), [Cline](https://cline.autodev.com), and [Roo Code](https://github.com/RooVetGit/Roo-Code)
 2. Extracts pinned npm package versions from each config
 3. Queries the npm registry for the latest version of each package
 4. Updates stale versions in-place with `.bak` backup safety
@@ -82,11 +83,50 @@ claude plugin install update-all-plugins@cc-update-all --scope user
 | `--json` | Output summary as JSON |
 | `--force` | Skip confirmation prompt |
 
+## Supported Tools
+
+**Vibe Coding / AI Coding Tools:**
+
+| Tool | MCP Updates | Extension Updates |
+|------|:-----------:|:-----------------:|
+| Cursor | ✓ | ✓ |
+| Cline | ✓ | — |
+| Roo Code | ✓ | — |
+| Windsurf | — | ✓ |
+
+Both MCP and extension features use a shared plugin-architecture with auto-discovered tool modules. Adding support for new editors requires only dropping a new module into `scripts-mcp/lib/tools/`.
+
+## Usage — Extensions
+
+```
+/update-extensions              Check extension versions across Cursor and Windsurf
+/update-extensions --tool NAME  Only process named tool (cursor-extensions, windsurf-extensions)
+/update-extensions --json       Output results as JSON
+/update-extensions --include-prerelease  Consider pre-release versions as latest
+```
+
+### How It Works
+
+1. Discovers `extensions.json` for Cursor (`~/.cursor/extensions/`) and Windsurf (`~/.windsurf/extensions/`)
+2. Extracts gallery-sourced extensions only (skips .vsix and unknown sources)
+3. Queries the VS Code Marketplace API in a single batch request
+4. Compares installed versions against latest — reports outdated extensions
+5. Check-only mode — updates must be applied manually through the editor's extension panel
+
+### Flags
+
+| Flag | Behavior |
+|------|----------|
+| (default) | Check all tools, report outdated extensions |
+| `--tool NAME` | Only process named tool |
+| `--json` | Output as JSON |
+| `--include-prerelease` | Consider pre-release versions |
+
 ## Dependencies
 
 - `git` — required (plugin updates)
 - `jq` — optional (safe JSON output; best-effort fallback when missing)
-- `Node.js >= 18` — required (MCP server updates)
+- `Node.js >= 18` — required (MCP server + extension updates)
 
 ## Exit Codes
 
