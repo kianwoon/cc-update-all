@@ -782,10 +782,11 @@ function discover() {
 
 function parseExtensions(configPath, rawJson) {
   if (!Array.isArray(rawJson)) {
-    return [];
+    return { extensions: [], skippedNonGallery: 0 };
   }
 
   var results = [];
+  var skippedNonGallery = 0;
 
   for (var i = 0; i < rawJson.length; i++) {
     var entry = rawJson[i];
@@ -803,6 +804,7 @@ function parseExtensions(configPath, rawJson) {
     // Must be gallery-sourced
     var source = entry.metadata && entry.metadata.source;
     if (source !== 'gallery') {
+      skippedNonGallery++;
       continue;
     }
 
@@ -814,7 +816,7 @@ function parseExtensions(configPath, rawJson) {
     });
   }
 
-  return results;
+  return { extensions: results, skippedNonGallery: skippedNonGallery };
 }
 
 // ---------------------------------------------------------------------------
@@ -1015,10 +1017,11 @@ function discover() {
 
 function parseExtensions(configPath, rawJson) {
   if (!Array.isArray(rawJson)) {
-    return [];
+    return { extensions: [], skippedNonGallery: 0 };
   }
 
   var results = [];
+  var skippedNonGallery = 0;
 
   for (var i = 0; i < rawJson.length; i++) {
     var entry = rawJson[i];
@@ -1033,6 +1036,7 @@ function parseExtensions(configPath, rawJson) {
 
     var source = entry.metadata && entry.metadata.source;
     if (source !== 'gallery') {
+      skippedNonGallery++;
       continue;
     }
 
@@ -1044,7 +1048,7 @@ function parseExtensions(configPath, rawJson) {
     });
   }
 
-  return results;
+  return { extensions: results, skippedNonGallery: skippedNonGallery };
 }
 
 // ---------------------------------------------------------------------------
