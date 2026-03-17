@@ -1,5 +1,8 @@
 # cc-update-all
 
+<img width="607" height="320" alt="image" src="https://github.com/user-attachments/assets/c7a31f63-9103-413e-9476-dbac48af2003" />
+
+
 Bulk-update Claude Code plugin marketplaces, MCP server versions, and editor extensions from within the CLI.
 
 ## Why?
