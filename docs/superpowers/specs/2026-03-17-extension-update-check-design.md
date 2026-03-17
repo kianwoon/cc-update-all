@@ -33,6 +33,8 @@ This is check-only by default. Cursor and Windsurf don't expose a CLI for extens
 - Per-project extension overrides (`.vscode/extensions.json`)
 - Non-gallery extensions (source: `"vsix"`, source: `"undefined"`)
 - Windows support (paths are macOS/Linux only, same as MCP feature)
+- Offline/cache mode (future enhancement)
+- Extension deprecation warnings (future enhancement)
 
 ## Architecture
 
@@ -41,15 +43,21 @@ This is check-only by default. Cursor and Windsurf don't expose a CLI for extens
 ```
 scripts-mcp/lib/
   marketplace-resolver.js          # NEW: batch Marketplace API queries
+  marketplace-resolver.test.js     # NEW: Marketplace resolver tests
   tools/
     cursor.js                    # existing (unchanged)
+    cursor.test.js               # existing (unchanged)
     cline.js                     # existing (unchanged)
+    cline.test.js                # existing (unchanged)
     roo-code.js                  # existing (unchanged)
+    roo-code.test.js             # existing (unchanged)
     cursor-extensions.js         # NEW: Cursor extensions.json handler
+    cursor-extensions.test.js    # NEW: Cursor extensions tests
     windsurf-extensions.js        # NEW: Windsurf extensions.json handler
+    windsurf-extensions.test.js   # NEW: Windsurf extensions tests
 scripts-mcp/
   update-extensions.js           # NEW: CLI entry point
-  update-extensions.test.js       # NEW: tests
+  update-extensions.test.js       # NEW: CLI tests
 ```
 
 ### Module Boundaries
@@ -58,8 +66,36 @@ scripts-mcp/
 - **tools/cursor-extensions.js** — reads Cursor's `extensions.json`, extracts gallery extensions.
 - **tools/windsurf-extensions.js** — reads Windsurf's `extensions.json`, extracts gallery extensions.
 - **update-extensions.js** — CLI parsing, orchestrates discovery + checking + reporting.
-- **registry.js** — updated to load extension tools alongside MCP tools (automatic, no code change needed — just drop new files in `tools/`).
-- **reporter.js** — reused for text/JSON output formatting (no code change needed).
+- **registry.js** — loads extension tools alongside MCP tools automatically (no code change needed — just drop new files in `tools/`). The CLI entry point filters discovered tools by duck-typing: `typeof tool.parseExtensions === 'function'` selects extension tools, `typeof tool.parseMcpServers === 'function'` selects MCP tools.
+- **reporter.js** — reused for text/JSON output formatting. Extension tool results must align to the existing MCP result schema for zero-change reuse (see Result Schema section below).
+
+### Result Schema (aligned with reporter.js)
+
+To reuse `reporter.js` without modification, extension tool results use the same schema as MCP results:
+
+```js
+var toolResult = {
+  status: 'ok',           // 'ok' | 'parse_error' | 'api_error'
+  configPath: '~/.cursor/extensions/extensions.json',
+  servers: [              // MUST use 'servers' key (reporter iterates tool.servers)
+    {
+      key: 'ms-python.vscode-pylance',    // extension ID
+      package: 'ms-python.vscode-pylance', // same as key (reporter uses package || key)
+      current: '2024.8.1',                 // installed version (reporter uses server.current)
+      latest: '2026.1.101',               // latest Marketplace version
+      status: 'updated'                    // 'updated' | 'current' | 'not_found' | 'check_failed'
+    }
+  ]
+};
+```
+
+Status strings map directly to reporter's `_STATUS_LABELS`:
+- `updated` → `UPDATED`
+- `current` → `CURRENT`
+- `not_found` → `SKIPPED` (already defined in reporter)
+- `check_failed` → `FAILED` (already defined in reporter)
+
+Non-gallery extensions are excluded from the `servers` array entirely. Their count is tracked in a separate `skippedNonGallery` field on the tool result for JSON output only (reporter ignores unknown fields).
 
 ### Why a separate CLI entry point?
 
@@ -68,11 +104,17 @@ Extension updates and MCP updates share infrastructure (registry, reporter, conf
 ## Data Flow
 
 1. User runs `/update-extensions [--tool NAME] [--json] [--include-prerelease]`
-2. `update-extensions.js` discovers extension tools via `registry.discover()`
-3. For each discovered tool:
-   - `tool.parseExtensions(configPath, rawJson)` extracts `{ id, version, key }[]` for gallery-sourced extensions
+2. `update-extensions.js` calls `registry.discover()`, then filters to extension tools only:
+   ```js
+   var discovered = registry.discover().filter(function (t) {
+     return typeof t.tool.parseExtensions === 'function';
+   });
+   ```
+3. For each discovered extension tool:
+   - `tool.parseExtensions(configPath, rawJson)` extracts `{ key, id, version, pinned }[]` for gallery-sourced extensions
    - `marketplaceResolver.resolveLatest(ids[], { includePreRelease })` — single batch POST to Marketplace API
-   - Compare installed vs. latest → categorize as `updated`, `current`, or `failed`
+   - Compare installed vs. latest → build result entries with `{ key, package: id, current: version, latest, status }`
+   - Non-gallery extensions are counted in `skippedNonGallery` but not added to `servers` array
 4. `reporter.formatText/formatJson(results)` formats output
 5. Exit 0 if all checks succeeded, exit 1 if any failures, exit 2 if total error
 
@@ -183,12 +225,15 @@ Accept: application/json;api-version=3.0-preview.1
 
 The existing `registry.js` automatically loads any `.js` file in `scripts-mcp/lib/tools/` that exports the standard interface. Extension tools (`cursor-extensions.js`, `windsurf-extensions.js`) will be discovered alongside MCP tools (`cursor.js`, `cline.js`, `roo-code.js`).
 
-The CLI entry point distinguishes them by checking for the presence of `parseExtensions` vs `parseMcpServers`:
+The CLI entry point filters to extension tools only:
 ```js
-var isExtensionTool = typeof tool.parseExtensions === 'function';
+var allDiscovered = registry.discover();
+var extensionTools = allDiscovered.filter(function (t) {
+  return typeof t.tool.parseExtensions === 'function';
+});
 ```
 
-Filtering by `--tool NAME` works for both: `--tool cursor` selects MCP module, `--tool cursor-extensions` selects extension module.
+For `--tool NAME` validation, the CLI filters from `extensionTools` (not all tools), so `--tool cursor` would fail (no extension tool named "cursor"). Valid values are `cursor-extensions` and `windsurf-extensions`.
 
 ## CLI Interface
 
@@ -230,13 +275,12 @@ Checking extensions across 2 tools...
     "cursor-extensions": {
       "status": "ok",
       "configPath": "/Users/you/.cursor/extensions/extensions.json",
-      "totalExtensions": 16,
-      "galleryExtensions": 14,
-      "extensions": [
+      "skippedNonGallery": 2,
+      "servers": [
         {
           "key": "ms-python.vscode-pylance",
-          "id": "ms-python.vscode-pylance",
-          "installed": "2024.8.1",
+          "package": "ms-python.vscode-pylance",
+          "current": "2024.8.1",
           "latest": "2026.1.101",
           "status": "updated"
         }
@@ -262,8 +306,8 @@ Checking extensions across 2 tools...
 - Realistically, most users have <50 extensions, so this is unlikely to trigger
 
 ### Non-gallery sources
-- Extensions with `source: "vsix"` or `source: "undefined"` are silently excluded from the API query
-- They are still listed in the JSON output under a `skippedNonGallery: N` count in the tool result (informational, not a failure)
+- Extensions with `source: "vsix"` or `source: "undefined"` are excluded from the `servers` array and not queried against the Marketplace API
+- Their count is tracked in `skippedNonGallery` on the tool result for informational purposes (not a failure, not counted in summary)
 
 ## Exit Codes
 
@@ -296,13 +340,3 @@ find ~/.claude/plugins/cache -path "*/cc-update-all/update-all-plugins/*/scripts
 
 Present the summary output to the user. If any extensions are outdated, note that the editors have no CLI for auto-installation — updates must be applied manually through the editor's extension panel.
 ```
-
-## Out of Scope
-
-- Roo Code extension checking (not a VS Code fork editor in the extension sense)
-- Auto-installation of extensions
-- .vsix file downloads
-- Per-project extension overrides
-- Windows support (future — same path pattern with `%APPDATA%`)
-- Offline/cache mode (future enhancement)
-- Extension deprecation warnings (future enhancement)
