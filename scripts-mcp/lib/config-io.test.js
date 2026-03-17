@@ -121,30 +121,46 @@ describe('writeConfig', () => {
     assert.ok(!fs.existsSync(p + '.tmp'), '.tmp should be removed after write');
   });
 
-  it('restores from .bak on mtime conflict', () => {
-    const p = tmpFile('mtime-test.json');
+  it('succeeds when post-rename mtime matches .tmp mtime (no external modification)', () => {
+    const p = tmpFile('mtime-ok-test.json');
+    const original = { version: 1 };
+    writeRaw(p, JSON.stringify(original, null, 2));
+
+    // Normal write — no monkey-patching. The rename preserves .tmp's mtime,
+    // so the post-rename stat should match, and writeConfig should succeed.
+    const { writeConfig } = require('./config-io.js');
+    const result = writeConfig(p, { version: 2 });
+    assert.equal(result.ok, true, 'should succeed when mtime matches after rename');
+
+    // Verify new content was written
+    const written = JSON.parse(readRaw(p));
+    assert.deepStrictEqual(written, { version: 2 });
+  });
+
+  it('restores from .bak when post-rename mtime differs (external modification detected)', () => {
+    const p = tmpFile('mtime-conflict-test.json');
     const original = { version: 1, important: true };
     writeRaw(p, JSON.stringify(original, null, 2));
 
-    const originalMtime = fs.statSync(p).mtimeMs;
-
-    // Monkey-patch fs.statSync to simulate an external process restoring the file.
-    // After writeConfig renames .tmp -> configPath, our patched statSync will return
-    // the original mtime (as if someone overwrote the file back), triggering the conflict.
+    // Monkey-patch fs.statSync to simulate an external process modifying the file
+    // after our rename. We intercept the post-rename stat on configPath and return
+    // a different mtime than what .tmp had, triggering the conflict path.
     const realStatSync = fs.statSync;
-    let callCount = 0;
+    let statInterceptTarget = null;
+    let statInterceptValue = null;
+
     fs.statSync = function (...args) {
       const result = realStatSync.apply(this, args);
-      if (args[0] === p) {
-        callCount++;
-        // The second call is the post-write verification stat (step 5).
-        // Return the original mtime to simulate external overwrite.
-        if (callCount === 2) {
-          result.mtimeMs = originalMtime;
-        }
+      if (statInterceptTarget && args[0] === statInterceptTarget) {
+        result.mtimeMs = statInterceptValue;
       }
       return result;
     };
+
+    // Intercept the stat on .tmp (step 4: record .tmp mtime) to capture a known value,
+    // then intercept the stat on configPath (step 6: verification) to return a different value.
+    statInterceptTarget = p + '.tmp';
+    statInterceptValue = 1000000.0; // fake .tmp mtime
 
     try {
       const { writeConfig } = require('./config-io.js');

@@ -27,14 +27,14 @@ function readConfig(configPath) {
  * Writes JSON data to a config file with .bak backup and mtime safety check.
  *
  * Steps:
- * 1. Record mtimeMs of existing file (read phase mtime)
+ * 1. Check if original file exists (for .bak backup and mtime check eligibility)
  * 2. Write .bak backup (only if file existed)
  * 3. Write .tmp staging file with new content
- * 4. Rename .tmp to actual path (atomic on POSIX)
- * 5. Verify mtime hasn't changed — if configPath's mtime still matches
- *    the original mtime recorded in step 1, an external process restored
- *    the original file after our rename (mtime conflict). Restore from .bak.
- * 6. Return { ok: true }
+ * 4. Record .tmp file's mtimeMs (after writing)
+ * 5. Rename .tmp to configPath (atomic on POSIX; preserves source mtime)
+ * 6. Stat configPath — if mtime matches .tmp's recorded mtime, no external
+ *    modification occurred. If mtime differs, an external process modified the
+ *    file after our rename — restore from .bak.
  *
  * On any failure after .bak is created, attempts to restore from .bak.
  *
@@ -46,13 +46,11 @@ function writeConfig(configPath, data) {
   const bakPath = configPath + '.bak';
   const tmpPath = configPath + '.tmp';
 
-  // Step 1: Record mtime of existing file
-  let originalMtimeMs = null;
+  // Step 1: Check if original file exists
   let hadOriginal = false;
 
   try {
-    const stat = fs.statSync(configPath);
-    originalMtimeMs = stat.mtimeMs;
+    fs.statSync(configPath);
     hadOriginal = true;
   } catch (err) {
     // File doesn't exist yet — no backup or mtime check needed
@@ -80,7 +78,19 @@ function writeConfig(configPath, data) {
       return { ok: false, error: `failed to write staging file: ${err.message}` };
     }
 
-    // Step 4: Rename .tmp to actual path (atomic on POSIX)
+    // Step 4: Record .tmp file's mtime after writing
+    let tmpMtimeMs = null;
+    try {
+      tmpMtimeMs = fs.statSync(tmpPath).mtimeMs;
+    } catch (err) {
+      try { fs.unlinkSync(tmpPath); } catch (_) { /* best effort */ }
+      if (hadOriginal) {
+        try { fs.copyFileSync(bakPath, configPath); } catch (_) { /* best effort */ }
+      }
+      return { ok: false, error: `failed to stat staging file: ${err.message}` };
+    }
+
+    // Step 5: Rename .tmp to configPath (atomic on POSIX; preserves source mtime)
     try {
       fs.renameSync(tmpPath, configPath);
     } catch (err) {
@@ -91,15 +101,15 @@ function writeConfig(configPath, data) {
       return { ok: false, error: `failed to rename staging file: ${err.message}` };
     }
 
-    // Step 5: Verify mtime hasn't been externally modified.
-    // After the atomic rename, configPath has the .tmp file's mtime (recent).
-    // If an external process overwrote the file back to its original content
-    // after our rename, the mtime would match originalMtimeMs — indicating conflict.
-    if (hadOriginal && originalMtimeMs !== null) {
+    // Step 6: Verify mtime hasn't been externally modified.
+    // rename() preserves the source file's mtime on POSIX, so the post-rename
+    // stat of configPath should match the pre-rename .tmp mtime.
+    // If it differs, an external process modified the file after our rename.
+    if (hadOriginal && tmpMtimeMs !== null) {
       try {
         const statAfter = fs.statSync(configPath);
-        if (statAfter.mtimeMs === originalMtimeMs) {
-          // mtime unchanged — external process likely restored the original file.
+        if (statAfter.mtimeMs !== tmpMtimeMs) {
+          // mtime differs — external process modified the file after our rename.
           // Restore from .bak to ensure original content is intact.
           try {
             fs.copyFileSync(bakPath, configPath);
@@ -117,7 +127,7 @@ function writeConfig(configPath, data) {
     // Clean up .tmp if it somehow still exists
     try { fs.unlinkSync(tmpPath); } catch (_) { /* already removed by rename */ }
 
-    // Step 6: Success
+    // Step 7: Success
     return { ok: true };
   } catch (err) {
     // Catch-all: restore from backup if possible
