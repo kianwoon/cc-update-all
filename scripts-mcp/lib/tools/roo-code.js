@@ -3,7 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
-const { readConfig } = require('../config-io');
+const { readConfig, writeConfig } = require('../config-io');
 
 // -------------------------------------------------------
 // Config path
@@ -71,7 +71,7 @@ function parseMcpServers(configPath, rawJson) {
     if (!server || typeof server !== 'object') {
       continue;
     }
-    servers.push({
+    const entry = {
       key,
       command: server.command || '',
       args: Array.isArray(server.args) ? server.args : [],
@@ -80,8 +80,9 @@ function parseMcpServers(configPath, rawJson) {
       type: server.type || 'stdio',
       disabled: server.disabled === true,
       alwaysAllow: Array.isArray(server.alwaysAllow) ? [...server.alwaysAllow] : [],
-      _raw: server,
-    });
+    };
+    Object.defineProperty(entry, '_raw', { value: server, enumerable: false });
+    servers.push(entry);
   }
 
   return servers;
@@ -103,21 +104,17 @@ function parseMcpServers(configPath, rawJson) {
 function writeMcpServers(servers) {
   const mcpServers = {};
   for (const entry of servers) {
-    mcpServers[entry.key] = {
-      command: entry.command,
-      args: entry.args,
-      env: entry.env,
-      timeout: entry.timeout,
-      type: entry.type,
-      disabled: entry.disabled,
-      alwaysAllow: entry.alwaysAllow,
-    };
+    const { key, _raw, ...knownFields } = entry;
+    if (_raw) {
+      mcpServers[key] = { ..._raw, ...knownFields };
+    } else {
+      mcpServers[key] = knownFields;
+    }
   }
 
   const config = { mcpServers };
-
-  const { writeConfig } = require('../config-io');
-  return writeConfig(getConfigPath(), config);
+  const configPath = module.exports.getConfigPath();
+  return writeConfig(configPath, config);
 }
 
 // -------------------------------------------------------

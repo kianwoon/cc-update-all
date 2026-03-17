@@ -227,7 +227,7 @@ describe('parseMcpServers', () => {
     assert.equal(servers[1].key, 'alsoValid');
   });
 
-  it('preserves _raw reference for round-trip support', () => {
+  it('preserves _raw reference for round-trip support (non-enumerable)', () => {
     const { parseMcpServers } = require('./roo-code.js');
     const serverDef = {
       command: 'npx',
@@ -241,7 +241,9 @@ describe('parseMcpServers', () => {
     const rawJson = { mcpServers: { myserver: serverDef } };
 
     const servers = parseMcpServers('/test/path.json', rawJson);
+    // _raw should still be accessible but not enumerable
     assert.strictEqual(servers[0]._raw, serverDef);
+    assert.deepStrictEqual(Object.keys(servers[0]).sort(), ['alwaysAllow', 'args', 'command', 'disabled', 'env', 'key', 'timeout', 'type']);
   });
 
   it('handles multiple server entries', () => {
@@ -348,6 +350,97 @@ describe('writeMcpServers', () => {
 
     const written = JSON.parse(readRaw(tmpPath));
     assert.deepStrictEqual(written, { mcpServers: {} });
+  });
+
+  it('directly calls writeMcpServers and produces correct output schema', () => {
+    // Patch getConfigPath to write to a temp file
+    const mod = require('./roo-code.js');
+    const tmpPath = tmpFile('direct-write-test.json');
+    const origGetConfigPath = mod.getConfigPath;
+    mod.getConfigPath = () => tmpPath;
+
+    try {
+      const servers = [
+        {
+          key: 'test-server',
+          command: 'npx',
+          args: ['-y', 'pkg@1.0.0'],
+          env: { KEY: 'val' },
+          timeout: 60,
+          type: 'stdio',
+          disabled: false,
+          alwaysAllow: ['tool1'],
+        },
+      ];
+
+      const result = mod.writeMcpServers(servers);
+      assert.equal(result.ok, true);
+
+      const written = JSON.parse(readRaw(tmpPath));
+      assert.ok(written.mcpServers, 'output should have mcpServers key');
+      assert.ok(written.mcpServers['test-server'], 'output should have server entry');
+      const entry = written.mcpServers['test-server'];
+      assert.equal(entry.command, 'npx');
+      assert.deepStrictEqual(entry.args, ['-y', 'pkg@1.0.0']);
+      assert.deepStrictEqual(entry.env, { KEY: 'val' });
+      assert.equal(entry.timeout, 60);
+      assert.equal(entry.type, 'stdio');
+      assert.equal(entry.disabled, false);
+      assert.deepStrictEqual(entry.alwaysAllow, ['tool1']);
+    } finally {
+      mod.getConfigPath = origGetConfigPath;
+    }
+  });
+
+  it('preserves unknown fields via _raw during write', () => {
+    // Parse a config with an unknown field, then write it back and verify
+    const { parseMcpServers, writeMcpServers } = require('./roo-code.js');
+    const tmpPath = tmpFile('unknown-fields-test.json');
+    const origGetConfigPath = require('./roo-code.js').getConfigPath;
+    require('./roo-code.js').getConfigPath = () => tmpPath;
+
+    try {
+      const rawJson = {
+        mcpServers: {
+          futureServer: {
+            command: 'node',
+            args: ['server.js'],
+            env: {},
+            timeout: 30,
+            type: 'stdio',
+            disabled: false,
+            alwaysAllow: [],
+            // Unknown / forward-compat field
+            futureOption: true,
+            customMeta: { version: 2, experimental: true },
+          },
+        },
+      };
+
+      const servers = parseMcpServers('/test/path.json', rawJson);
+      assert.equal(servers.length, 1);
+
+      // _raw is non-enumerable so it won't appear in JSON.stringify or spread from Object.keys
+      const result = writeMcpServers(servers);
+      assert.equal(result.ok, true);
+
+      const written = JSON.parse(readRaw(tmpPath));
+      const entry = written.mcpServers['futureServer'];
+
+      // Known fields
+      assert.equal(entry.command, 'node');
+      assert.deepStrictEqual(entry.args, ['server.js']);
+      assert.equal(entry.timeout, 30);
+      assert.equal(entry.type, 'stdio');
+      assert.equal(entry.disabled, false);
+      assert.deepStrictEqual(entry.alwaysAllow, []);
+
+      // Unknown fields preserved from _raw
+      assert.equal(entry.futureOption, true, 'unknown field futureOption should be preserved');
+      assert.deepStrictEqual(entry.customMeta, { version: 2, experimental: true }, 'unknown field customMeta should be preserved');
+    } finally {
+      require('./roo-code.js').getConfigPath = origGetConfigPath;
+    }
   });
 });
 
