@@ -1,4 +1,4 @@
-[![CI](https://github.com/kianwoon/cc-update-all/actions/workflows/ci.yml/badge.svg)](https://github.com/kianwoon/cc-update-all/actions/workflows/ci.yml) [![CodeQL](https://github.com/kianwoon/cc-update-all/actions/workflows/codeql/codeql-analysis/badge.svg)](https://github.com/kianwoon/cc-update-all/actions/workflows/codeql-analysis) [![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0) ![GitHub stars](https://img.shields.io/github/stars/kianwoon/cc-update-all?style=social)
+[![CI](https://github.com/kianwoon/cc-update-all/actions/workflows/ci.yml/badge.svg)](https://github.com/kianwoon/cc-update-all/actions/workflows/ci.yml) [![CodeQL](https://img.shields.io/github/actions/workflow/status/kianwoon/cc-update-all/dynamic/github-code-scanning/codeql?label=CodeQL)](https://github.com/kianwoon/cc-update-all/security/code-scanning) [![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0) ![GitHub stars](https://img.shields.io/github/stars/kianwoon/cc-update-all?style=social)
 
 # cc-update-all
 
