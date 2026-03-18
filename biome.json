@@ -12,6 +12,9 @@
       },
       "complexity": {
         "noForEach": "off"
+      },
+      "performance": {
+        "noDelete": "off"
       }
     }
   },
@@ -28,10 +31,6 @@
     }
   },
   "files": {
-    "ignore": [
-      "node_modules",
-      "*.bundle.mjs",
-      "bun.lock"
-    ]
+    "ignore": ["node_modules", "*.bundle.mjs", "bun.lock"]
   }
 }
