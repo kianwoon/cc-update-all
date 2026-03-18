@@ -1,4 +1,4 @@
-[![CI](https://github.com/kianwoon/cc-update-all/actions/workflows/ci.yml/badge.svg)](https://github.com/kianwoon/cc-update-all/actions/workflows/ci.yml)
+[![CI](https://github.com/kianwoon/cc-update-all/actions/workflows/ci.yml/badge.svg)](https://github.com/kianwoon/cc-update-all/actions/workflows/ci.yml) [![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0) ![GitHub stars](https://img.shields.io/github/stars/kianwoon/cc-update-all?style=social)
 
 # cc-update-all
 
@@ -162,6 +162,8 @@ Both MCP and extension features use a shared plugin-architecture with auto-disco
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, coding standards, and PR guidelines.
 
+Have questions or ideas? Start a [discussion](https://github.com/kianwoon/cc-update-all/discussions) or open an [issue](https://github.com/kianwoon/cc-update-all/issues).
+
 ## Exit Codes
 
 | Code | Meaning |
@@ -169,3 +171,13 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, coding standards, 
 | 0 | All updates successful |
 | 1 | Partial failure (some targets failed) |
 | 2 | Total failure or error |
+
+---
+
+## License
+
+[Apache-2.0](LICENSE) — free for personal and commercial use.
+
+## Author
+
+Made by [kianwoon](https://github.com/kianwoon) · [Contributions welcome](CONTRIBUTING.md)
