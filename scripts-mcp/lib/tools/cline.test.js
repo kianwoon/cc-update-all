@@ -12,6 +12,12 @@ function tmpFile(name) {
   return path.join(TMPDIR, name);
 }
 
+function tmpDir(name) {
+  const dir = path.join(TMPDIR, name);
+  fs.mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
 function writeRaw(filePath, content) {
   fs.writeFileSync(filePath, content, 'utf8');
 }
@@ -21,88 +27,133 @@ function readRaw(filePath) {
 }
 
 function cleanup() {
-  for (const file of fs.readdirSync(TMPDIR)) {
-    try { fs.unlinkSync(path.join(TMPDIR, file)); } catch (_) { /* best effort */ }
+  fs.rmSync(TMPDIR, { recursive: true, force: true });
+}
+
+const realHomedir = os.homedir;
+const realXdgConfigHome = process.env.XDG_CONFIG_HOME;
+const realAppData = process.env.APPDATA;
+let fakeHome = null;
+
+function stubHomedir(home) {
+  fakeHome = home;
+  os.homedir = () => fakeHome;
+}
+
+function restoreEnv() {
+  os.homedir = realHomedir;
+  if (realXdgConfigHome === undefined) {
+    delete process.env.XDG_CONFIG_HOME;
+  } else {
+    process.env.XDG_CONFIG_HOME = realXdgConfigHome;
+  }
+
+  if (realAppData === undefined) {
+    delete process.env.APPDATA;
+  } else {
+    process.env.APPDATA = realAppData;
   }
 }
 
-// Minimal stub of readConfig that reads from real filesystem
-// The actual module is imported inside each test so we can control the file state.
-// We test against the real configPath by setting up files at the expected location
-// via a tmpdir that we construct to mimic the real path structure.
-
 describe('cline', () => {
-  let cline;
-
   beforeEach(() => {
-    // Fresh require each time to avoid cached state
-    delete require.cache[require.resolve('./cline.js')];
-    cline = require('./cline.js');
+    restoreEnv();
   });
 
-  afterEach(() => cleanup());
+  afterEach(() => {
+    restoreEnv();
+    cleanup();
+  });
 });
 
-// --- discover() tests ---
-
 describe('cline discover()', () => {
-  const configPath = path.join(
-    os.homedir(),
-    'Library',
-    'Application Support',
-    'Code',
-    'User',
-    'globalStorage',
-    'saoudrizwan.claude-dev',
-    'settings',
-    'cline_mcp_settings.json'
-  );
+  it('returns macOS configPath when file exists', () => {
+    const home = tmpDir('home-macos');
+    const configPath = path.join(
+      home,
+      'Library',
+      'Application Support',
+      'Code',
+      'User',
+      'globalStorage',
+      'saoudrizwan.claude-dev',
+      'settings',
+      'cline_mcp_settings.json'
+    );
 
-  it('returns configPath when file exists', () => {
-    // Ensure the directory and file exist at the real Cline path
     fs.mkdirSync(path.dirname(configPath), { recursive: true });
     writeRaw(configPath, JSON.stringify({ mcpServers: {} }, null, 2));
 
+    stubHomedir(home);
     delete require.cache[require.resolve('./cline.js')];
     const cline = require('./cline.js');
-    const result = cline.discover();
 
-    assert.equal(result, configPath);
-
-    // Cleanup: remove the real file we created
-    try { fs.unlinkSync(configPath); } catch (_) { /* best effort */ }
-    // Attempt to clean up empty directories (best effort, ignore failures)
-    try { fs.rmdirSync(path.dirname(configPath)); } catch (_) { /* best effort */ }
-    try { fs.rmdirSync(path.dirname(path.dirname(configPath))); } catch (_) { /* best effort */ }
+    assert.equal(cline.discover(), configPath);
   });
 
-  it('returns null when file does not exist', () => {
-    // We need to test with a non-existent path. To avoid depending on
-    // whether the user's real Cline config exists, we temporarily rename
-    // it if present, then restore after.
-    let renamed = false;
-    if (fs.existsSync(configPath)) {
-      const bakPath = configPath + '.testbak';
-      fs.renameSync(configPath, bakPath);
-      renamed = true;
-    }
+  it('returns Linux configPath when file exists in XDG config home', () => {
+    const home = tmpDir('home-linux');
+    const xdgConfigHome = path.join(home, '.config');
+    const configPath = path.join(
+      xdgConfigHome,
+      'Code',
+      'User',
+      'globalStorage',
+      'saoudrizwan.claude-dev',
+      'settings',
+      'cline_mcp_settings.json'
+    );
 
-    try {
-      delete require.cache[require.resolve('./cline.js')];
-      const cline = require('./cline.js');
-      const result = cline.discover();
+    fs.mkdirSync(path.dirname(configPath), { recursive: true });
+    writeRaw(configPath, JSON.stringify({ mcpServers: {} }, null, 2));
 
-      assert.equal(result, null);
-    } finally {
-      if (renamed) {
-        const bakPath = configPath + '.testbak';
-        try { fs.renameSync(bakPath, configPath); } catch (_) { /* best effort */ }
-      }
-    }
+    stubHomedir(home);
+    process.env.XDG_CONFIG_HOME = xdgConfigHome;
+    delete require.cache[require.resolve('./cline.js')];
+    const cline = require('./cline.js');
+
+    assert.equal(cline.discover(), configPath);
+  });
+
+  it('returns Windows configPath when file exists in APPDATA', () => {
+    const home = tmpDir('home-windows');
+    const xdgConfigHome = path.join(home, '.config');
+    const appData = path.join(home, 'AppData', 'Roaming');
+    const configPath = path.join(
+      appData,
+      'Code',
+      'User',
+      'globalStorage',
+      'saoudrizwan.claude-dev',
+      'settings',
+      'cline_mcp_settings.json'
+    );
+
+    fs.rmSync(xdgConfigHome, { recursive: true, force: true });
+    fs.mkdirSync(path.dirname(configPath), { recursive: true });
+    writeRaw(configPath, JSON.stringify({ mcpServers: {} }, null, 2));
+
+    stubHomedir(home);
+    process.env.XDG_CONFIG_HOME = xdgConfigHome;
+    process.env.APPDATA = appData;
+    delete require.cache[require.resolve('./cline.js')];
+    const cline = require('./cline.js');
+
+    assert.equal(cline.discover(), configPath);
+  });
+
+  it('returns null when file does not exist in any supported location', () => {
+    const home = tmpDir('home-missing');
+
+    stubHomedir(home);
+    delete process.env.XDG_CONFIG_HOME;
+    delete process.env.APPDATA;
+    delete require.cache[require.resolve('./cline.js')];
+    const cline = require('./cline.js');
+
+    assert.equal(cline.discover(), null);
   });
 });
-
-// --- parseMcpServers() tests ---
 
 describe('cline parseMcpServers()', () => {
   it('extracts all fields including extras (timeout, type, disabled, alwaysAllow)', () => {
@@ -158,7 +209,6 @@ describe('cline parseMcpServers()', () => {
 
     assert.equal(result.length, 2);
 
-    // Minimal server: extra fields should be undefined or have defaults
     const minimal = result.find((s) => s.key === 'minimal');
     assert.equal(minimal.command, 'node');
     assert.deepStrictEqual(minimal.args, ['server.js']);
@@ -168,7 +218,6 @@ describe('cline parseMcpServers()', () => {
     assert.equal(minimal.alwaysAllow, undefined);
     assert.equal(minimal.env, undefined);
 
-    // Partial server: only specified extras present
     const partial = result.find((s) => s.key === 'partial');
     assert.equal(partial.command, 'npx');
     assert.equal(partial.timeout, 30);
@@ -227,8 +276,6 @@ describe('cline parseMcpServers()', () => {
   });
 });
 
-// --- writeMcpServers() tests ---
-
 describe('cline writeMcpServers()', () => {
   it('wraps in Cline schema preserving all extra fields', () => {
     const p = tmpFile('cline-write-full.json');
@@ -284,7 +331,6 @@ describe('cline writeMcpServers()', () => {
 
     assert.equal(server.command, 'node');
     assert.deepStrictEqual(server.args, ['server.js']);
-    // Extra fields should NOT be present as undefined
     assert.equal('timeout' in server, false, 'timeout should not be in output');
     assert.equal('type' in server, false, 'type should not be in output');
     assert.equal('disabled' in server, false, 'disabled should not be in output');
@@ -330,8 +376,6 @@ describe('cline writeMcpServers()', () => {
   });
 });
 
-// --- Round-trip test ---
-
 describe('cline round-trip', () => {
   it('parse -> pass through -> write preserves all extra fields', () => {
     const p = tmpFile('cline-roundtrip.json');
@@ -363,37 +407,16 @@ describe('cline round-trip', () => {
     delete require.cache[require.resolve('./cline.js')];
     const cline = require('./cline.js');
 
-    // Parse
     const parsed = cline.parseMcpServers(p, originalConfig);
-
-    // Write back
     const writeResult = cline.writeMcpServers(parsed, p);
     assert.equal(writeResult.ok, true);
 
-    // Read back and verify
     const roundTripped = JSON.parse(readRaw(p));
     const originalServers = originalConfig.mcpServers;
     const roundTrippedServers = roundTripped.mcpServers;
 
-    // Full server: all fields preserved
-    assert.deepStrictEqual(
-      roundTrippedServers['full-server'],
-      originalServers['full-server'],
-      'full-server should have identical round-trip'
-    );
-
-    // Partial server: all present fields preserved, absent fields stay absent
-    assert.deepStrictEqual(
-      roundTrippedServers['partial-server'],
-      originalServers['partial-server'],
-      'partial-server should have identical round-trip'
-    );
-
-    // Minimal server: only basic fields preserved
-    assert.deepStrictEqual(
-      roundTrippedServers['minimal-server'],
-      originalServers['minimal-server'],
-      'minimal-server should have identical round-trip'
-    );
+    assert.deepStrictEqual(roundTrippedServers['full-server'], originalServers['full-server']);
+    assert.deepStrictEqual(roundTrippedServers['partial-server'], originalServers['partial-server']);
+    assert.deepStrictEqual(roundTrippedServers['minimal-server'], originalServers['minimal-server']);
   });
 });

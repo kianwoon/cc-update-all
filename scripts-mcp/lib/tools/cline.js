@@ -3,19 +3,51 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
-const { readConfig, writeConfig } = require('../config-io');
+const { writeConfig } = require('../config-io');
 
-const CONFIG_PATH = path.join(
-  os.homedir(),
-  'Library',
-  'Application Support',
-  'Code',
-  'User',
-  'globalStorage',
-  'saoudrizwan.claude-dev',
-  'settings',
-  'cline_mcp_settings.json'
-);
+function getCandidateConfigPaths() {
+  const home = os.homedir();
+  const appData = process.env.APPDATA;
+
+  const candidates = [
+    path.join(
+      home,
+      'Library',
+      'Application Support',
+      'Code',
+      'User',
+      'globalStorage',
+      'saoudrizwan.claude-dev',
+      'settings',
+      'cline_mcp_settings.json'
+    ),
+    path.join(
+      process.env.XDG_CONFIG_HOME || path.join(home, '.config'),
+      'Code',
+      'User',
+      'globalStorage',
+      'saoudrizwan.claude-dev',
+      'settings',
+      'cline_mcp_settings.json'
+    )
+  ];
+
+  if (appData) {
+    candidates.push(
+      path.join(
+        appData,
+        'Code',
+        'User',
+        'globalStorage',
+        'saoudrizwan.claude-dev',
+        'settings',
+        'cline_mcp_settings.json'
+      )
+    );
+  }
+
+  return candidates;
+}
 
 /**
  * Discovers the Cline MCP config file.
@@ -23,12 +55,17 @@ const CONFIG_PATH = path.join(
  * @returns {string | null} Absolute config path if the file exists, otherwise null.
  */
 function discover() {
-  try {
-    fs.accessSync(CONFIG_PATH, fs.constants.R_OK);
-    return CONFIG_PATH;
-  } catch (_) {
-    return null;
+  const candidates = getCandidateConfigPaths();
+  for (const configPath of candidates) {
+    try {
+      fs.accessSync(configPath, fs.constants.R_OK);
+      return configPath;
+    } catch (_) {
+      // Try next candidate.
+    }
   }
+
+  return null;
 }
 
 /**
@@ -119,6 +156,7 @@ function writeMcpServers(servers, configPath) {
 module.exports = {
   name: 'cline',
   discover,
+  getCandidateConfigPaths,
   parseMcpServers,
   writeMcpServers,
 };
