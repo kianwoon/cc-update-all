@@ -1,5 +1,3 @@
-'use strict';
-
 const { describe, it, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 const https = require('node:https');
@@ -23,7 +21,7 @@ let _mockFactory;
  */
 function stubHttpsGet(factory) {
   _mockFactory = factory;
-  https.get = function (urlOrOpts, optsOrCb, maybeCb) {
+  https.get = (urlOrOpts, optsOrCb, maybeCb) => {
     const url = typeof urlOrOpts === 'string' ? urlOrOpts : urlOrOpts.href;
     const cb = typeof optsOrCb === 'function' ? optsOrCb : maybeCb;
     const opts = typeof optsOrCb === 'object' && optsOrCb !== null ? optsOrCb : {};
@@ -58,7 +56,9 @@ function createMockRequest(statusCode, body, error = null, simulateTimeout = fal
   let errorHandler = null;
 
   const req = {
-    destroy() { /* no-op */ },
+    destroy() {
+      /* no-op */
+    },
 
     setTimeout(_ms) {
       if (simulateTimeout) {
@@ -84,12 +84,14 @@ function createMockRequest(statusCode, body, error = null, simulateTimeout = fal
      * Instead, the factory wraps createMockRequest and passes the callback
      * to end(), or stores it on the request for end() to use.
      */
-    end() { return this; },
+    end() {
+      return this;
+    },
   };
 
   // Attach end behavior externally via _simulate method
   // This is called by the factory with the response callback
-  req._simulate = function (responseCallback) {
+  req._simulate = (responseCallback) => {
     setImmediate(() => {
       if (error && !simulateTimeout) {
         if (errorHandler) errorHandler(error);

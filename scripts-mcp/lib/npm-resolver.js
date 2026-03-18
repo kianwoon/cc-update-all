@@ -1,5 +1,3 @@
-'use strict';
-
 const https = require('node:https');
 
 // -------------------------------------------------------
@@ -41,7 +39,8 @@ function extractPinnedVersion(args) {
 
   // For scoped packages (@scope/name), the first @ is the scope prefix.
   // We need to find the @ that separates the package name from the version.
-  let pkg, version;
+  let pkg;
+  let version;
 
   if (pkgArg.startsWith('@')) {
     // Scoped package: @scope/name@version or @scope/name@version/sub/path

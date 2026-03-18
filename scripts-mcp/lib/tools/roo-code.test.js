@@ -1,5 +1,3 @@
-'use strict';
-
 const { describe, it, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -22,7 +20,11 @@ function readRaw(filePath) {
 
 function cleanup() {
   for (const file of fs.readdirSync(TMPDIR)) {
-    try { fs.unlinkSync(path.join(TMPDIR, file)); } catch (_) { /* best effort */ }
+    try {
+      fs.unlinkSync(path.join(TMPDIR, file));
+    } catch (_) {
+      /* best effort */
+    }
   }
 }
 
@@ -35,7 +37,7 @@ const EXPECTED_CONFIG_PATH = path.join(
   'globalStorage',
   'rooveterinaryinc.roo-cline',
   'settings',
-  'mcp_settings.json'
+  'mcp_settings.json',
 );
 
 // -------------------------------------------------------
@@ -55,15 +57,27 @@ describe('roo-code discover()', () => {
     assert.equal(result, EXPECTED_CONFIG_PATH);
 
     // Cleanup
-    try { fs.unlinkSync(EXPECTED_CONFIG_PATH); } catch (_) { /* best effort */ }
-    try { fs.rmdirSync(path.dirname(EXPECTED_CONFIG_PATH)); } catch (_) { /* best effort */ }
-    try { fs.rmdirSync(path.dirname(path.dirname(EXPECTED_CONFIG_PATH))); } catch (_) { /* best effort */ }
+    try {
+      fs.unlinkSync(EXPECTED_CONFIG_PATH);
+    } catch (_) {
+      /* best effort */
+    }
+    try {
+      fs.rmdirSync(path.dirname(EXPECTED_CONFIG_PATH));
+    } catch (_) {
+      /* best effort */
+    }
+    try {
+      fs.rmdirSync(path.dirname(path.dirname(EXPECTED_CONFIG_PATH)));
+    } catch (_) {
+      /* best effort */
+    }
   });
 
   it('returns null when file does not exist', () => {
     let renamed = false;
     if (fs.existsSync(EXPECTED_CONFIG_PATH)) {
-      const bakPath = EXPECTED_CONFIG_PATH + '.testbak';
+      const bakPath = `${EXPECTED_CONFIG_PATH}.testbak`;
       fs.renameSync(EXPECTED_CONFIG_PATH, bakPath);
       renamed = true;
     }
@@ -76,8 +90,12 @@ describe('roo-code discover()', () => {
       assert.equal(result, null);
     } finally {
       if (renamed) {
-        const bakPath = EXPECTED_CONFIG_PATH + '.testbak';
-        try { fs.renameSync(bakPath, EXPECTED_CONFIG_PATH); } catch (_) { /* best effort */ }
+        const bakPath = `${EXPECTED_CONFIG_PATH}.testbak`;
+        try {
+          fs.renameSync(bakPath, EXPECTED_CONFIG_PATH);
+        } catch (_) {
+          /* best effort */
+        }
       }
     }
   });
@@ -220,9 +238,33 @@ describe('roo-code parseMcpServers()', () => {
   it('handles multiple server entries', () => {
     const rawJson = {
       mcpServers: {
-        server1: { command: 'npx', args: ['-y', 'pkg1@1.0.0'], env: {}, timeout: 60, type: 'stdio', disabled: false, alwaysAllow: ['a'] },
-        server2: { command: 'node', args: ['index.js'], env: { PORT: '3000' }, timeout: 30, type: 'sse', disabled: true, alwaysAllow: [] },
-        server3: { command: 'python', args: ['-m', 'server'], env: {}, timeout: null, type: 'stdio', disabled: false, alwaysAllow: ['b', 'c'] },
+        server1: {
+          command: 'npx',
+          args: ['-y', 'pkg1@1.0.0'],
+          env: {},
+          timeout: 60,
+          type: 'stdio',
+          disabled: false,
+          alwaysAllow: ['a'],
+        },
+        server2: {
+          command: 'node',
+          args: ['index.js'],
+          env: { PORT: '3000' },
+          timeout: 30,
+          type: 'sse',
+          disabled: true,
+          alwaysAllow: [],
+        },
+        server3: {
+          command: 'python',
+          args: ['-m', 'server'],
+          env: {},
+          timeout: null,
+          type: 'stdio',
+          disabled: false,
+          alwaysAllow: ['b', 'c'],
+        },
       },
     };
 
@@ -403,21 +445,21 @@ describe('roo-code round-trip', () => {
     assert.deepStrictEqual(
       roundTrippedServers['full-server'],
       originalServers['full-server'],
-      'full-server should have identical round-trip'
+      'full-server should have identical round-trip',
     );
 
     // Partial server: all present fields preserved, absent fields stay absent
     assert.deepStrictEqual(
       roundTrippedServers['partial-server'],
       originalServers['partial-server'],
-      'partial-server should have identical round-trip'
+      'partial-server should have identical round-trip',
     );
 
     // Minimal server: only basic fields preserved
     assert.deepStrictEqual(
       roundTrippedServers['minimal-server'],
       originalServers['minimal-server'],
-      'minimal-server should have identical round-trip'
+      'minimal-server should have identical round-trip',
     );
 
     // Also verify it serializes and reads back correctly via config-io

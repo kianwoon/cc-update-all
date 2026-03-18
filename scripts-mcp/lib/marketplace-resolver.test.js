@@ -1,5 +1,3 @@
-'use strict';
-
 const { describe, it, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 const https = require('node:https');
@@ -13,8 +11,8 @@ let _mockFactory;
 
 function stubHttpsRequest(factory) {
   _mockFactory = factory;
-  https.request = function (urlOrOpts, optsOrCb, maybeCb) {
-    const url = typeof urlOrOpts === 'string' ? urlOrOpts : (urlOrOpts && urlOrOpts.href) || '';
+  https.request = (urlOrOpts, optsOrCb, maybeCb) => {
+    const url = typeof urlOrOpts === 'string' ? urlOrOpts : urlOrOpts?.href || '';
     const cb = typeof optsOrCb === 'function' ? optsOrCb : maybeCb;
     const opts = typeof optsOrCb === 'object' && optsOrCb !== null ? optsOrCb : {};
     const req = _mockFactory(url, opts, cb);
@@ -37,7 +35,9 @@ function createMockRequest(statusCode, body, error, simulateTimeout) {
     destroy() {},
     setTimeout(ms) {
       if (simulateTimeout) {
-        setTimeout(() => { if (timeoutHandler) timeoutHandler(); }, 20);
+        setTimeout(() => {
+          if (timeoutHandler) timeoutHandler();
+        }, 20);
       }
       return this;
     },
@@ -46,12 +46,18 @@ function createMockRequest(statusCode, body, error, simulateTimeout) {
       else if (event === 'error') errorHandler = handler;
       return this;
     },
-    write() { return this; },
-    end() { return this; },
-    abort() { return this; }
+    write() {
+      return this;
+    },
+    end() {
+      return this;
+    },
+    abort() {
+      return this;
+    },
   };
 
-  req._simulate = function (responseCallback) {
+  req._simulate = (responseCallback) => {
     setImmediate(() => {
       if (error && !simulateTimeout) {
         if (errorHandler) errorHandler(error);
@@ -70,7 +76,7 @@ function createMockRequest(statusCode, body, error, simulateTimeout) {
             setImmediate(() => handler());
           }
           return this;
-        }
+        },
       };
 
       if (responseCallback && statusCode !== null) {
@@ -103,16 +109,29 @@ describe('marketplace-resolver resolveLatest', () => {
     stubHttpsRequest((url, opts, cb) => {
       assert.ok(url.includes('marketplace.visualstudio.com'));
       assert.equal(opts.method, 'POST');
-      const req = createMockRequest(200, JSON.stringify({
-        results: [{
-          extensions: [
-            { extensionId: 'ext-1', extensionName: 'vscode-pylance', publisher: { publisherName: 'ms-python' },
-              versions: [{ version: '2026.1.101' }] },
-            { extensionId: 'ext-2', extensionName: 'macros', publisher: { publisherName: 'geddski' },
-              versions: [{ version: '2.0.0' }] }
-          ]
-        }]
-      }));
+      const req = createMockRequest(
+        200,
+        JSON.stringify({
+          results: [
+            {
+              extensions: [
+                {
+                  extensionId: 'ext-1',
+                  extensionName: 'vscode-pylance',
+                  publisher: { publisherName: 'ms-python' },
+                  versions: [{ version: '2026.1.101' }],
+                },
+                {
+                  extensionId: 'ext-2',
+                  extensionName: 'macros',
+                  publisher: { publisherName: 'geddski' },
+                  versions: [{ version: '2.0.0' }],
+                },
+              ],
+            },
+          ],
+        }),
+      );
       req._simulate(cb);
       return req;
     });
@@ -127,14 +146,23 @@ describe('marketplace-resolver resolveLatest', () => {
 
   it('returns versions with id format publisher.extensionName', async () => {
     stubHttpsRequest((url, opts, cb) => {
-      const req = createMockRequest(200, JSON.stringify({
-        results: [{
-          extensions: [
-            { extensionId: 'ext-1', extensionName: 'vscode-pylance', publisher: { publisherName: 'ms-python' },
-              versions: [{ version: '1.0.0' }] }
-          ]
-        }]
-      }));
+      const req = createMockRequest(
+        200,
+        JSON.stringify({
+          results: [
+            {
+              extensions: [
+                {
+                  extensionId: 'ext-1',
+                  extensionName: 'vscode-pylance',
+                  publisher: { publisherName: 'ms-python' },
+                  versions: [{ version: '1.0.0' }],
+                },
+              ],
+            },
+          ],
+        }),
+      );
       req._simulate(cb);
       return req;
     });
@@ -147,14 +175,23 @@ describe('marketplace-resolver resolveLatest', () => {
   it('omits extensions not found in API response', async () => {
     stubHttpsRequest((url, opts, cb) => {
       // API only returns one of the two requested extensions
-      const req = createMockRequest(200, JSON.stringify({
-        results: [{
-          extensions: [
-            { extensionId: 'ext-1', extensionName: 'vscode-pylance', publisher: { publisherName: 'ms-python' },
-              versions: [{ version: '1.0.0' }] }
-          ]
-        }]
-      }));
+      const req = createMockRequest(
+        200,
+        JSON.stringify({
+          results: [
+            {
+              extensions: [
+                {
+                  extensionId: 'ext-1',
+                  extensionName: 'vscode-pylance',
+                  publisher: { publisherName: 'ms-python' },
+                  versions: [{ version: '1.0.0' }],
+                },
+              ],
+            },
+          ],
+        }),
+      );
       req._simulate(cb);
       return req;
     });
@@ -226,12 +263,15 @@ describe('marketplace-resolver resolveLatest', () => {
   it('sends correct request body with criteria and flags', async () => {
     let capturedBody = '';
     stubHttpsRequest((_url, opts, cb) => {
-      const req = createMockRequest(200, JSON.stringify({
-        results: [{ extensions: [] }]
-      }));
+      const req = createMockRequest(
+        200,
+        JSON.stringify({
+          results: [{ extensions: [] }],
+        }),
+      );
       // Capture the written body
       const origWrite = req.write.bind(req);
-      req.write = function (data) {
+      req.write = (data) => {
         capturedBody = data;
         return origWrite(data);
       };
@@ -243,8 +283,8 @@ describe('marketplace-resolver resolveLatest', () => {
     const parsed = JSON.parse(capturedBody);
 
     assert.equal(parsed.filters.length, 1);
-    assert.ok(parsed.filters[0].criteria.some(c => c.filterType === 12));
-    assert.ok(parsed.filters[0].criteria.some(c => c.filterType === 7 && c.value === 'ms-python.vscode-pylance'));
+    assert.ok(parsed.filters[0].criteria.some((c) => c.filterType === 12));
+    assert.ok(parsed.filters[0].criteria.some((c) => c.filterType === 7 && c.value === 'ms-python.vscode-pylance'));
     assert.equal(parsed.flags, 976);
   });
 
@@ -258,9 +298,12 @@ describe('marketplace-resolver resolveLatest', () => {
     stubHttpsRequest((_url, opts, cb) => {
       // Verify timeout is set
       assert.ok(opts.timeout >= 10000);
-      const req = createMockRequest(200, JSON.stringify({
-        results: [{ extensions: [] }]
-      }));
+      const req = createMockRequest(
+        200,
+        JSON.stringify({
+          results: [{ extensions: [] }],
+        }),
+      );
       req._simulate(cb);
       return req;
     });
@@ -270,15 +313,24 @@ describe('marketplace-resolver resolveLatest', () => {
 
   it('handles extensions with missing versions array gracefully', async () => {
     stubHttpsRequest((_url, _opts, cb) => {
-      const req = createMockRequest(200, JSON.stringify({
-        results: [{
-          extensions: [
-            { extensionId: 'ext-1', extensionName: 'vscode-pylance', publisher: { publisherName: 'ms-python' },
-              versions: [{ version: '1.0.0' }] },
-            { extensionId: 'ext-2', extensionName: 'broken', publisher: { publisherName: 'test' } }
-          ]
-        }]
-      }));
+      const req = createMockRequest(
+        200,
+        JSON.stringify({
+          results: [
+            {
+              extensions: [
+                {
+                  extensionId: 'ext-1',
+                  extensionName: 'vscode-pylance',
+                  publisher: { publisherName: 'ms-python' },
+                  versions: [{ version: '1.0.0' }],
+                },
+                { extensionId: 'ext-2', extensionName: 'broken', publisher: { publisherName: 'test' } },
+              ],
+            },
+          ],
+        }),
+      );
       req._simulate(cb);
       return req;
     });

@@ -1,5 +1,3 @@
-'use strict';
-
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
@@ -14,7 +12,7 @@ const CONFIG_PATH = path.join(
   'globalStorage',
   'saoudrizwan.claude-dev',
   'settings',
-  'cline_mcp_settings.json'
+  'cline_mcp_settings.json',
 );
 
 /**
@@ -45,7 +43,7 @@ const EXTRA_FIELDS = ['timeout', 'type', 'disabled', 'alwaysAllow'];
  * @returns {Array<{ key: string, command: string, args: string[], env?: object, timeout?: number, type?: string, disabled?: boolean, alwaysAllow?: string[] }>}
  */
 function parseMcpServers(_configPath, rawJson) {
-  const mcpServers = rawJson && rawJson.mcpServers;
+  const mcpServers = rawJson?.mcpServers;
   if (!mcpServers || typeof mcpServers !== 'object') {
     return [];
   }

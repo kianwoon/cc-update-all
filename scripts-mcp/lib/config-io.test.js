@@ -1,5 +1,3 @@
-'use strict';
-
 const { describe, it, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -50,10 +48,8 @@ describe('readConfig', () => {
     const result = readConfig(p);
     assert.equal(result.ok, false);
     assert.ok(
-      result.error.includes('malformed') ||
-      result.error.includes('JSON') ||
-      result.error.includes('parse'),
-      `unexpected error: ${result.error}`
+      result.error.includes('malformed') || result.error.includes('JSON') || result.error.includes('parse'),
+      `unexpected error: ${result.error}`,
     );
   });
 
@@ -93,7 +89,7 @@ describe('writeConfig', () => {
     const result = writeConfig(p, { updated: true });
     assert.equal(result.ok, true);
 
-    const bakContent = readRaw(p + '.bak');
+    const bakContent = readRaw(`${p}.bak`);
     assert.deepStrictEqual(JSON.parse(bakContent), original);
   });
 
@@ -107,7 +103,7 @@ describe('writeConfig', () => {
     assert.equal(result.ok, true);
 
     const written = readRaw(p);
-    assert.equal(written, JSON.stringify(data, null, 2) + '\n');
+    assert.equal(written, `${JSON.stringify(data, null, 2)}\n`);
     assert.deepStrictEqual(JSON.parse(written), data);
   });
 
@@ -118,7 +114,7 @@ describe('writeConfig', () => {
     const { writeConfig } = require('./config-io.js');
     const result = writeConfig(p, { clean: true });
     assert.equal(result.ok, true);
-    assert.ok(!fs.existsSync(p + '.tmp'), '.tmp should be removed after write');
+    assert.ok(!fs.existsSync(`${p}.tmp`), '.tmp should be removed after write');
   });
 
   it('succeeds when post-rename mtime matches .tmp mtime (no external modification)', () => {
@@ -159,7 +155,7 @@ describe('writeConfig', () => {
 
     // Intercept the stat on .tmp (step 4: record .tmp mtime) to capture a known value,
     // then intercept the stat on configPath (step 6: verification) to return a different value.
-    statInterceptTarget = p + '.tmp';
+    statInterceptTarget = `${p}.tmp`;
     statInterceptValue = 1000000.0; // fake .tmp mtime
 
     try {
@@ -204,7 +200,7 @@ describe('writeConfig', () => {
     const { writeConfig } = require('./config-io.js');
     writeConfig(p, { test: true });
 
-    assert.ok(!fs.existsSync(p + '.bak'), '.bak should not exist for new files');
+    assert.ok(!fs.existsSync(`${p}.bak`), '.bak should not exist for new files');
   });
 
   afterEach(() => cleanup());

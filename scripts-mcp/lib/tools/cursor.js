@@ -1,5 +1,3 @@
-'use strict';
-
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
@@ -23,10 +21,10 @@ function discover() {
  * @returns {Array<{ key: string, command: string, args: string[], env?: object }>}
  */
 function parseMcpServers(configPath, rawJson) {
-  const servers = rawJson && rawJson.mcpServers ? rawJson.mcpServers : {};
+  const servers = rawJson?.mcpServers ? rawJson.mcpServers : {};
   return Object.entries(servers).map(([key, entry]) => ({
     key,
-    ...entry
+    ...entry,
   }));
 }
 

@@ -1,5 +1,3 @@
-'use strict';
-
 const { describe, it, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -53,8 +51,13 @@ function makeGalleryEntry(id, version, pinned) {
   return {
     identifier: { id: id, uuid: '00000000-0000-0000-0000-000000000000' },
     version: version,
-    location: { path: '/fake/' + id + '-' + version },
-    metadata: { installedTimestamp: 1, pinned: !!pinned, source: 'gallery', id: '00000000-0000-0000-0000-000000000000' }
+    location: { path: `/fake/${id}-${version}` },
+    metadata: {
+      installedTimestamp: 1,
+      pinned: !!pinned,
+      source: 'gallery',
+      id: '00000000-0000-0000-0000-000000000000',
+    },
   };
 }
 
@@ -62,8 +65,8 @@ function makeVsixEntry(id, version) {
   return {
     identifier: { id: id, uuid: '11111111-1111-1111-1111-111111111111' },
     version: version,
-    location: { path: '/fake/' + id + '-' + version },
-    metadata: { installedTimestamp: 1, pinned: false, source: 'vsix', id: '11111111-1111-1111-1111-111111111111' }
+    location: { path: `/fake/${id}-${version}` },
+    metadata: { installedTimestamp: 1, pinned: false, source: 'vsix', id: '11111111-1111-1111-1111-111111111111' },
   };
 }
 
@@ -71,16 +74,20 @@ function makeNoSourceEntry(id, version) {
   return {
     identifier: { id: id, uuid: '22222222-2222-2222-2222-222222222222' },
     version: version,
-    location: { path: '/fake/' + id + '-' + version },
-    metadata: { installedTimestamp: 1, pinned: false }
+    location: { path: `/fake/${id}-${version}` },
+    metadata: { installedTimestamp: 1, pinned: false },
   };
 }
 
 // --- discover() tests ---
 
 describe('cursor-extensions discover()', () => {
-  beforeEach(() => { restoreHomedir(); });
-  afterEach(() => { restoreHomedir(); });
+  beforeEach(() => {
+    restoreHomedir();
+  });
+  afterEach(() => {
+    restoreHomedir();
+  });
 
   it('returns configPath when ~/.cursor/extensions/extensions.json exists', () => {
     const home = tmpDir('home-exists');
@@ -124,7 +131,7 @@ describe('cursor-extensions parseExtensions()', () => {
     const mod = freshModule();
     const rawJson = [
       makeGalleryEntry('ms-python.vscode-pylance', '2024.8.1', false),
-      makeGalleryEntry('geddski.macros', '1.2.1', true)
+      makeGalleryEntry('geddski.macros', '1.2.1', true),
     ];
 
     const result = mod.parseExtensions('/fake/path', rawJson);
@@ -141,10 +148,7 @@ describe('cursor-extensions parseExtensions()', () => {
 
   it('excludes vsix-sourced extensions', () => {
     const mod = freshModule();
-    const rawJson = [
-      makeGalleryEntry('ms-python.pylance', '1.0.0', false),
-      makeVsixEntry('some.vsix-ext', '2.0.0')
-    ];
+    const rawJson = [makeGalleryEntry('ms-python.pylance', '1.0.0', false), makeVsixEntry('some.vsix-ext', '2.0.0')];
 
     const result = mod.parseExtensions('/fake/path', rawJson);
 
@@ -155,10 +159,7 @@ describe('cursor-extensions parseExtensions()', () => {
 
   it('excludes extensions with undefined source', () => {
     const mod = freshModule();
-    const rawJson = [
-      makeGalleryEntry('gallery.ext', '1.0.0', false),
-      makeNoSourceEntry('nosource.ext', '2.0.0')
-    ];
+    const rawJson = [makeGalleryEntry('gallery.ext', '1.0.0', false), makeNoSourceEntry('nosource.ext', '2.0.0')];
 
     const result = mod.parseExtensions('/fake/path', rawJson);
 
@@ -181,15 +182,15 @@ describe('cursor-extensions parseExtensions()', () => {
     const rawJson = [
       makeGalleryEntry('valid.ext', '1.0.0', false),
       { metadata: { source: 'gallery' } }, // missing identifier and version
-      { identifier: { id: 'no-version' }, version: '1.0.0', metadata: { source: 'gallery' } } // no uuid, but valid
+      { identifier: { id: 'no-version' }, version: '1.0.0', metadata: { source: 'gallery' } }, // no uuid, but valid
     ];
 
     const result = mod.parseExtensions('/fake/path', rawJson);
 
     // Should include valid entries, skip malformed
     assert.ok(result.extensions.length >= 2);
-    assert.ok(result.extensions.some(e => e.id === 'valid.ext'));
-    assert.ok(result.extensions.some(e => e.id === 'no-version'));
+    assert.ok(result.extensions.some((e) => e.id === 'valid.ext'));
+    assert.ok(result.extensions.some((e) => e.id === 'no-version'));
   });
 
   it('handles non-array rawJson gracefully', () => {

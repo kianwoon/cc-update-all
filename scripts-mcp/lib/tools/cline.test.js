@@ -1,5 +1,3 @@
-'use strict';
-
 const { describe, it, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -22,7 +20,11 @@ function readRaw(filePath) {
 
 function cleanup() {
   for (const file of fs.readdirSync(TMPDIR)) {
-    try { fs.unlinkSync(path.join(TMPDIR, file)); } catch (_) { /* best effort */ }
+    try {
+      fs.unlinkSync(path.join(TMPDIR, file));
+    } catch (_) {
+      /* best effort */
+    }
   }
 }
 
@@ -55,7 +57,7 @@ describe('cline discover()', () => {
     'globalStorage',
     'saoudrizwan.claude-dev',
     'settings',
-    'cline_mcp_settings.json'
+    'cline_mcp_settings.json',
   );
 
   it('returns configPath when file exists', () => {
@@ -70,10 +72,22 @@ describe('cline discover()', () => {
     assert.equal(result, configPath);
 
     // Cleanup: remove the real file we created
-    try { fs.unlinkSync(configPath); } catch (_) { /* best effort */ }
+    try {
+      fs.unlinkSync(configPath);
+    } catch (_) {
+      /* best effort */
+    }
     // Attempt to clean up empty directories (best effort, ignore failures)
-    try { fs.rmdirSync(path.dirname(configPath)); } catch (_) { /* best effort */ }
-    try { fs.rmdirSync(path.dirname(path.dirname(configPath))); } catch (_) { /* best effort */ }
+    try {
+      fs.rmdirSync(path.dirname(configPath));
+    } catch (_) {
+      /* best effort */
+    }
+    try {
+      fs.rmdirSync(path.dirname(path.dirname(configPath)));
+    } catch (_) {
+      /* best effort */
+    }
   });
 
   it('returns null when file does not exist', () => {
@@ -82,7 +96,7 @@ describe('cline discover()', () => {
     // it if present, then restore after.
     let renamed = false;
     if (fs.existsSync(configPath)) {
-      const bakPath = configPath + '.testbak';
+      const bakPath = `${configPath}.testbak`;
       fs.renameSync(configPath, bakPath);
       renamed = true;
     }
@@ -95,8 +109,12 @@ describe('cline discover()', () => {
       assert.equal(result, null);
     } finally {
       if (renamed) {
-        const bakPath = configPath + '.testbak';
-        try { fs.renameSync(bakPath, configPath); } catch (_) { /* best effort */ }
+        const bakPath = `${configPath}.testbak`;
+        try {
+          fs.renameSync(bakPath, configPath);
+        } catch (_) {
+          /* best effort */
+        }
       }
     }
   });
@@ -379,21 +397,21 @@ describe('cline round-trip', () => {
     assert.deepStrictEqual(
       roundTrippedServers['full-server'],
       originalServers['full-server'],
-      'full-server should have identical round-trip'
+      'full-server should have identical round-trip',
     );
 
     // Partial server: all present fields preserved, absent fields stay absent
     assert.deepStrictEqual(
       roundTrippedServers['partial-server'],
       originalServers['partial-server'],
-      'partial-server should have identical round-trip'
+      'partial-server should have identical round-trip',
     );
 
     // Minimal server: only basic fields preserved
     assert.deepStrictEqual(
       roundTrippedServers['minimal-server'],
       originalServers['minimal-server'],
-      'minimal-server should have identical round-trip'
+      'minimal-server should have identical round-trip',
     );
   });
 });

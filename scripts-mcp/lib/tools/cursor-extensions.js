@@ -1,24 +1,13 @@
-// =============================================================================
-// cursor-extensions.js -- Cursor extension.json handler
-//
-// Reads ~/.cursor/extensions/extensions.json and extracts gallery-sourced
-// extension entries for version checking.
-//
-// Tool module interface: { name, discover(), parseExtensions() }
-// =============================================================================
-
-'use strict';
-
-var fs = require('node:fs');
-var path = require('node:path');
-var os = require('node:os');
+const fs = require('node:fs');
+const path = require('node:path');
+const os = require('node:os');
 
 // ---------------------------------------------------------------------------
 // discover()
 // ---------------------------------------------------------------------------
 
 function discover() {
-  var configPath = path.join(os.homedir(), '.cursor', 'extensions', 'extensions.json');
+  const configPath = path.join(os.homedir(), '.cursor', 'extensions', 'extensions.json');
   return fs.existsSync(configPath) ? configPath : null;
 }
 
@@ -31,11 +20,11 @@ function parseExtensions(configPath, rawJson) {
     return { extensions: [], skippedNonGallery: 0 };
   }
 
-  var results = [];
-  var skippedNonGallery = 0;
+  const results = [];
+  let skippedNonGallery = 0;
 
-  for (var i = 0; i < rawJson.length; i++) {
-    var entry = rawJson[i];
+  for (let i = 0; i < rawJson.length; i++) {
+    const entry = rawJson[i];
 
     // Must have identifier with id
     if (!entry || !entry.identifier || !entry.identifier.id) {
@@ -48,7 +37,7 @@ function parseExtensions(configPath, rawJson) {
     }
 
     // Must be gallery-sourced
-    var source = entry.metadata && entry.metadata.source;
+    const source = entry.metadata?.source;
     if (source !== 'gallery') {
       skippedNonGallery++;
       continue;
@@ -58,7 +47,7 @@ function parseExtensions(configPath, rawJson) {
       key: entry.identifier.id,
       id: entry.identifier.id,
       version: entry.version,
-      pinned: !!(entry.metadata && entry.metadata.pinned)
+      pinned: !!entry.metadata?.pinned,
     });
   }
 
@@ -72,5 +61,5 @@ function parseExtensions(configPath, rawJson) {
 module.exports = {
   name: 'cursor-extensions',
   discover: discover,
-  parseExtensions: parseExtensions
+  parseExtensions: parseExtensions,
 };

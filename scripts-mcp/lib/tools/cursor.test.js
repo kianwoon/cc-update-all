@@ -1,5 +1,3 @@
-'use strict';
-
 const { describe, it, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -95,9 +93,9 @@ describe('cursor parseMcpServers()', () => {
     const configPath = '/fake/path/mcp.json';
     const rawJson = {
       mcpServers: {
-        'anthropic': { command: 'npx', args: ['-y', '@anthropic/mcp-server@1.2.3'], env: {} },
-        'local-tool': { command: 'node', args: ['/path/to/tool.js'] }
-      }
+        anthropic: { command: 'npx', args: ['-y', '@anthropic/mcp-server@1.2.3'], env: {} },
+        'local-tool': { command: 'node', args: ['/path/to/tool.js'] },
+      },
     };
 
     const result = cursor.parseMcpServers(configPath, rawJson);
@@ -131,8 +129,8 @@ describe('cursor parseMcpServers()', () => {
     const configPath = '/fake/path/mcp.json';
     const rawJson = {
       mcpServers: {
-        'my-server': { command: 'npx', args: ['-y', 'pkg@1.0.0'], env: { KEY: 'val' }, disabled: true }
-      }
+        'my-server': { command: 'npx', args: ['-y', 'pkg@1.0.0'], env: { KEY: 'val' }, disabled: true },
+      },
     };
 
     const result = cursor.parseMcpServers(configPath, rawJson);
@@ -154,7 +152,7 @@ describe('cursor writeMcpServers()', () => {
   it('wraps servers in correct Cursor schema', () => {
     const servers = [
       { key: 'anthropic', command: 'npx', args: ['-y', '@anthropic/mcp-server@1.2.3'], env: {} },
-      { key: 'local-tool', command: 'node', args: ['/path/to/tool.js'] }
+      { key: 'local-tool', command: 'node', args: ['/path/to/tool.js'] },
     ];
 
     const result = cursor.writeMcpServers(servers);
@@ -163,9 +161,9 @@ describe('cursor writeMcpServers()', () => {
     assert.equal(Object.keys(result.mcpServers).length, 2);
 
     // Verify first server
-    assert.equal(result.mcpServers['anthropic'].command, 'npx');
-    assert.deepStrictEqual(result.mcpServers['anthropic'].args, ['-y', '@anthropic/mcp-server@1.2.3']);
-    assert.deepStrictEqual(result.mcpServers['anthropic'].env, {});
+    assert.equal(result.mcpServers.anthropic.command, 'npx');
+    assert.deepStrictEqual(result.mcpServers.anthropic.args, ['-y', '@anthropic/mcp-server@1.2.3']);
+    assert.deepStrictEqual(result.mcpServers.anthropic.env, {});
 
     // Verify second server (no env)
     assert.equal(result.mcpServers['local-tool'].command, 'node');
@@ -181,9 +179,7 @@ describe('cursor writeMcpServers()', () => {
   });
 
   it('preserves extra properties on server entries', () => {
-    const servers = [
-      { key: 'my-server', command: 'npx', args: ['-y', 'pkg@1.0.0'], disabled: true, label: 'My Tool' }
-    ];
+    const servers = [{ key: 'my-server', command: 'npx', args: ['-y', 'pkg@1.0.0'], disabled: true, label: 'My Tool' }];
 
     const result = cursor.writeMcpServers(servers);
 
@@ -201,9 +197,9 @@ describe('cursor round-trip', () => {
 
     const rawJson = {
       mcpServers: {
-        'anthropic': { command: 'npx', args: ['-y', '@anthropic/mcp-server@1.2.3'], env: {} },
-        'local-tool': { command: 'node', args: ['/path/to/tool.js'] }
-      }
+        anthropic: { command: 'npx', args: ['-y', '@anthropic/mcp-server@1.2.3'], env: {} },
+        'local-tool': { command: 'node', args: ['/path/to/tool.js'] },
+      },
     };
 
     // Parse
@@ -222,8 +218,8 @@ describe('cursor round-trip', () => {
 
     const rawJson = {
       mcpServers: {
-        'env-server': { command: 'npx', args: ['-y', 'pkg@1.0.0'], env: { API_KEY: 'secret' } }
-      }
+        'env-server': { command: 'npx', args: ['-y', 'pkg@1.0.0'], env: { API_KEY: 'secret' } },
+      },
     };
 
     const parsed = cursor.parseMcpServers(configPath, rawJson);
@@ -239,8 +235,8 @@ describe('cursor round-trip', () => {
     const rawJson = {
       mcpServers: {
         'keep-me': { command: 'node', args: ['/old/path.js'] },
-        'update-me': { command: 'npx', args: ['-y', 'pkg@1.0.0'] }
-      }
+        'update-me': { command: 'npx', args: ['-y', 'pkg@1.0.0'] },
+      },
     };
 
     const parsed = cursor.parseMcpServers(configPath, rawJson);

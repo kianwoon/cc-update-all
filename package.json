@@ -5,7 +5,9 @@
   "description": "Bulk-update Claude Code plugins, MCP servers, and editor extensions",
   "scripts": {
     "test": "node --test scripts-mcp/lib/npm-resolver.test.js scripts-mcp/lib/config-io.test.js scripts-mcp/lib/tools/cursor.test.js scripts-mcp/lib/tools/cline.test.js scripts-mcp/lib/tools/roo-code.test.js scripts-mcp/lib/registry.test.js scripts-mcp/lib/reporter.test.js scripts-mcp/lib/marketplace-resolver.test.js scripts-mcp/lib/tools/cursor-extensions.test.js scripts-mcp/lib/tools/windsurf-extensions.test.js scripts-mcp/update-mcp.test.js scripts-mcp/update-extensions.test.js",
-    "test:mcp": "node --test scripts-mcp/**/*.test.js"
+    "test:mcp": "node --test scripts-mcp/**/*.test.js",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write ."
   },
   "engines": {
     "node": ">=18.0.0"
@@ -17,5 +19,7 @@
     "bulk-update"
   ],
   "license": "Apache-2.0",
-  "dependencies": {}
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4"
+  }
 }

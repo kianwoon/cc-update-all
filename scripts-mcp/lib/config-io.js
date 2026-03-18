@@ -1,5 +1,3 @@
-'use strict';
-
 const fs = require('node:fs');
 
 /**
@@ -43,8 +41,8 @@ function readConfig(configPath) {
  * @returns {{ ok: true } | { ok: false, error: string }}
  */
 function writeConfig(configPath, data) {
-  const bakPath = configPath + '.bak';
-  const tmpPath = configPath + '.tmp';
+  const bakPath = `${configPath}.bak`;
+  const tmpPath = `${configPath}.tmp`;
 
   // Step 1: Check if original file exists
   let hadOriginal = false;
@@ -56,7 +54,7 @@ function writeConfig(configPath, data) {
     // File doesn't exist yet — no backup or mtime check needed
   }
 
-  const json = JSON.stringify(data, null, 2) + '\n';
+  const json = `${JSON.stringify(data, null, 2)}\n`;
 
   try {
     // Step 2: Write .bak backup (only if original file existed)
@@ -73,7 +71,11 @@ function writeConfig(configPath, data) {
       fs.writeFileSync(tmpPath, json, 'utf8');
     } catch (err) {
       if (hadOriginal) {
-        try { fs.copyFileSync(bakPath, configPath); } catch (_) { /* best effort */ }
+        try {
+          fs.copyFileSync(bakPath, configPath);
+        } catch (_) {
+          /* best effort */
+        }
       }
       return { ok: false, error: `failed to write staging file: ${err.message}` };
     }
@@ -83,9 +85,17 @@ function writeConfig(configPath, data) {
     try {
       tmpMtimeMs = fs.statSync(tmpPath).mtimeMs;
     } catch (err) {
-      try { fs.unlinkSync(tmpPath); } catch (_) { /* best effort */ }
+      try {
+        fs.unlinkSync(tmpPath);
+      } catch (_) {
+        /* best effort */
+      }
       if (hadOriginal) {
-        try { fs.copyFileSync(bakPath, configPath); } catch (_) { /* best effort */ }
+        try {
+          fs.copyFileSync(bakPath, configPath);
+        } catch (_) {
+          /* best effort */
+        }
       }
       return { ok: false, error: `failed to stat staging file: ${err.message}` };
     }
@@ -94,9 +104,17 @@ function writeConfig(configPath, data) {
     try {
       fs.renameSync(tmpPath, configPath);
     } catch (err) {
-      try { fs.unlinkSync(tmpPath); } catch (_) { /* best effort */ }
+      try {
+        fs.unlinkSync(tmpPath);
+      } catch (_) {
+        /* best effort */
+      }
       if (hadOriginal) {
-        try { fs.copyFileSync(bakPath, configPath); } catch (_) { /* best effort */ }
+        try {
+          fs.copyFileSync(bakPath, configPath);
+        } catch (_) {
+          /* best effort */
+        }
       }
       return { ok: false, error: `failed to rename staging file: ${err.message}` };
     }
@@ -113,28 +131,44 @@ function writeConfig(configPath, data) {
           // Restore from .bak to ensure original content is intact.
           try {
             fs.copyFileSync(bakPath, configPath);
-          } catch (_) { /* best effort */ }
+          } catch (_) {
+            /* best effort */
+          }
           return { ok: false, error: 'mtime safety check failed: file was modified externally during write' };
         }
       } catch (err) {
         try {
           fs.copyFileSync(bakPath, configPath);
-        } catch (_) { /* best effort */ }
+        } catch (_) {
+          /* best effort */
+        }
         return { ok: false, error: `post-write verification failed: ${err.message}` };
       }
     }
 
     // Clean up .tmp if it somehow still exists
-    try { fs.unlinkSync(tmpPath); } catch (_) { /* already removed by rename */ }
+    try {
+      fs.unlinkSync(tmpPath);
+    } catch (_) {
+      /* already removed by rename */
+    }
 
     // Step 7: Success
     return { ok: true };
   } catch (err) {
     // Catch-all: restore from backup if possible
     if (hadOriginal) {
-      try { fs.copyFileSync(bakPath, configPath); } catch (_) { /* best effort */ }
+      try {
+        fs.copyFileSync(bakPath, configPath);
+      } catch (_) {
+        /* best effort */
+      }
     }
-    try { fs.unlinkSync(tmpPath); } catch (_) { /* best effort */ }
+    try {
+      fs.unlinkSync(tmpPath);
+    } catch (_) {
+      /* best effort */
+    }
     return { ok: false, error: `unexpected error during write: ${err.message}` };
   }
 }

@@ -1,5 +1,3 @@
-'use strict';
-
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
@@ -13,7 +11,7 @@ const CONFIG_PATH = path.join(
   'globalStorage',
   'rooveterinaryinc.roo-cline',
   'settings',
-  'mcp_settings.json'
+  'mcp_settings.json',
 );
 
 // -------------------------------------------------------
@@ -53,7 +51,7 @@ function discover() {
  * @returns {Array<{ key: string, command: string, args: string[], env?: object, timeout?: number, type?: string, disabled?: boolean, alwaysAllow?: string[] }>}
  */
 function parseMcpServers(_configPath, rawJson) {
-  const mcpServers = rawJson && rawJson.mcpServers;
+  const mcpServers = rawJson?.mcpServers;
   if (!mcpServers || typeof mcpServers !== 'object') {
     return [];
   }
