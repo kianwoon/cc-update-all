@@ -10,6 +10,12 @@ function tmpFile(name) {
   return path.join(TMPDIR, name);
 }
 
+function tmpDir(name) {
+  const dir = path.join(TMPDIR, name);
+  fs.mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
 function writeRaw(filePath, content) {
   fs.writeFileSync(filePath, content, 'utf8');
 }
@@ -19,91 +25,133 @@ function readRaw(filePath) {
 }
 
 function cleanup() {
-  for (const file of fs.readdirSync(TMPDIR)) {
-    try {
-      fs.unlinkSync(path.join(TMPDIR, file));
-    } catch (_) {
-      /* best effort */
-    }
+  fs.rmSync(TMPDIR, { recursive: true, force: true });
+}
+
+const realHomedir = os.homedir;
+const realXdgConfigHome = process.env.XDG_CONFIG_HOME;
+const realAppData = process.env.APPDATA;
+let fakeHome = null;
+
+function stubHomedir(home) {
+  fakeHome = home;
+  os.homedir = () => fakeHome;
+}
+
+function restoreEnv() {
+  os.homedir = realHomedir;
+  if (realXdgConfigHome === undefined) {
+    delete process.env.XDG_CONFIG_HOME;
+  } else {
+    process.env.XDG_CONFIG_HOME = realXdgConfigHome;
+  }
+
+  if (realAppData === undefined) {
+    delete process.env.APPDATA;
+  } else {
+    process.env.APPDATA = realAppData;
   }
 }
 
-const EXPECTED_CONFIG_PATH = path.join(
-  os.homedir(),
-  'Library',
-  'Application Support',
-  'Code',
-  'User',
-  'globalStorage',
-  'rooveterinaryinc.roo-cline',
-  'settings',
-  'mcp_settings.json',
-);
-
-// -------------------------------------------------------
-// discover() tests
-// -------------------------------------------------------
-
-describe('roo-code discover()', () => {
-  it('returns configPath when file exists', () => {
-    // Ensure the directory and file exist at the real Roo Code path
-    fs.mkdirSync(path.dirname(EXPECTED_CONFIG_PATH), { recursive: true });
-    writeRaw(EXPECTED_CONFIG_PATH, JSON.stringify({ mcpServers: {} }, null, 2));
-
-    delete require.cache[require.resolve('./roo-code.js')];
-    const rooCode = require('./roo-code.js');
-    const result = rooCode.discover();
-
-    assert.equal(result, EXPECTED_CONFIG_PATH);
-
-    // Cleanup
-    try {
-      fs.unlinkSync(EXPECTED_CONFIG_PATH);
-    } catch (_) {
-      /* best effort */
-    }
-    try {
-      fs.rmdirSync(path.dirname(EXPECTED_CONFIG_PATH));
-    } catch (_) {
-      /* best effort */
-    }
-    try {
-      fs.rmdirSync(path.dirname(path.dirname(EXPECTED_CONFIG_PATH)));
-    } catch (_) {
-      /* best effort */
-    }
+describe('roo-code', () => {
+  beforeEach(() => {
+    restoreEnv();
   });
 
-  it('returns null when file does not exist', () => {
-    let renamed = false;
-    if (fs.existsSync(EXPECTED_CONFIG_PATH)) {
-      const bakPath = `${EXPECTED_CONFIG_PATH}.testbak`;
-      fs.renameSync(EXPECTED_CONFIG_PATH, bakPath);
-      renamed = true;
-    }
-
-    try {
-      delete require.cache[require.resolve('./roo-code.js')];
-      const rooCode = require('./roo-code.js');
-      const result = rooCode.discover();
-
-      assert.equal(result, null);
-    } finally {
-      if (renamed) {
-        const bakPath = `${EXPECTED_CONFIG_PATH}.testbak`;
-        try {
-          fs.renameSync(bakPath, EXPECTED_CONFIG_PATH);
-        } catch (_) {
-          /* best effort */
-        }
-      }
-    }
+  afterEach(() => {
+    restoreEnv();
+    cleanup();
   });
 });
 
-// -------------------------------------------------------
-// parseMcpServers() tests
-// -------------------------------------------------------
+describe('roo-code discover()', () => {
+  it('returns macOS configPath when file exists', () => {
+    const home = tmpDir('home-macos');
+    const configPath = path.join(
+      home,
+      'Library',
+      'Application Support',
+      'Code',
+      'User',
+      'globalStorage',
+      'rooveterinaryinc.roo-cline',
+      'settings',
+      'mcp_settings.json',
+    );
+
+    fs.mkdirSync(path.dirname(configPath), { recursive: true });
+    writeRaw(configPath, JSON.stringify({ mcpServers: {} }, null, 2));
+
+    stubHomedir(home);
+    delete require.cache[require.resolve('./roo-code.js')];
+    const rooCode = require('./roo-code.js');
+
+    assert.equal(rooCode.discover(), configPath);
+  });
+
+  it('returns Linux configPath when file exists in XDG config home', () => {
+    const home = tmpDir('home-linux');
+    const xdgConfigHome = path.join(home, '.config');
+    const configPath = path.join(
+      xdgConfigHome,
+      'Code',
+      'User',
+      'globalStorage',
+      'rooveterinaryinc.roo-cline',
+      'settings',
+      'mcp_settings.json',
+    );
+
+    fs.mkdirSync(path.dirname(configPath), { recursive: true });
+    writeRaw(configPath, JSON.stringify({ mcpServers: {} }, null, 2));
+
+    stubHomedir(home);
+    process.env.XDG_CONFIG_HOME = xdgConfigHome;
+    delete require.cache[require.resolve('./roo-code.js')];
+    const rooCode = require('./roo-code.js');
+
+    assert.equal(rooCode.discover(), configPath);
+  });
+
+  it('returns Windows configPath when file exists in APPDATA', () => {
+    const home = tmpDir('home-windows');
+    const xdgConfigHome = path.join(home, '.config');
+    const appData = path.join(home, 'AppData', 'Roaming');
+    const configPath = path.join(
+      appData,
+      'Code',
+      'User',
+      'globalStorage',
+      'rooveterinaryinc.roo-cline',
+      'settings',
+      'mcp_settings.json',
+    );
+
+    fs.rmSync(xdgConfigHome, { recursive: true, force: true });
+    fs.mkdirSync(path.dirname(configPath), { recursive: true });
+    writeRaw(configPath, JSON.stringify({ mcpServers: {} }, null, 2));
+
+    stubHomedir(home);
+    process.env.XDG_CONFIG_HOME = xdgConfigHome;
+    process.env.APPDATA = appData;
+    delete require.cache[require.resolve('./roo-code.js')];
+    const rooCode = require('./roo-code.js');
+
+    assert.equal(rooCode.discover(), configPath);
+  });
+
+  it('returns null when file does not exist in any supported location', () => {
+    const home = tmpDir('home-missing');
+
+    stubHomedir(home);
+    delete process.env.XDG_CONFIG_HOME;
+    delete process.env.APPDATA;
+    delete require.cache[require.resolve('./roo-code.js')];
+    const rooCode = require('./roo-code.js');
+
+    assert.equal(rooCode.discover(), null);
+  });
+});
 
 describe('roo-code parseMcpServers()', () => {
   it('extracts all fields including extras (timeout, type, disabled, alwaysAllow)', () => {
@@ -159,7 +207,6 @@ describe('roo-code parseMcpServers()', () => {
 
     assert.equal(result.length, 2);
 
-    // Minimal server: extra fields should be undefined
     const minimal = result.find((s) => s.key === 'minimal');
     assert.equal(minimal.command, 'node');
     assert.deepStrictEqual(minimal.args, ['server.js']);
@@ -169,7 +216,6 @@ describe('roo-code parseMcpServers()', () => {
     assert.equal(minimal.alwaysAllow, undefined);
     assert.equal(minimal.env, undefined);
 
-    // Partial server: only specified extras present
     const partial = result.find((s) => s.key === 'partial');
     assert.equal(partial.command, 'npx');
     assert.equal(partial.timeout, 30);
@@ -279,10 +325,6 @@ describe('roo-code parseMcpServers()', () => {
   });
 });
 
-// -------------------------------------------------------
-// writeMcpServers() tests
-// -------------------------------------------------------
-
 describe('roo-code writeMcpServers()', () => {
   it('wraps in Roo Code schema preserving all extra fields', () => {
     const p = tmpFile('roo-write-full.json');
@@ -303,7 +345,6 @@ describe('roo-code writeMcpServers()', () => {
     const rooCode = require('./roo-code.js');
     const configObj = rooCode.writeMcpServers(servers);
 
-    // writeMcpServers returns a plain object (not written to disk)
     assert.ok(configObj.mcpServers, 'should have mcpServers key');
     assert.ok(configObj.mcpServers.anthropic, 'should have server entry');
 
@@ -316,7 +357,6 @@ describe('roo-code writeMcpServers()', () => {
     assert.equal(server.disabled, false);
     assert.deepStrictEqual(server.alwaysAllow, ['tool1', 'tool2']);
 
-    // Write to disk via config-io to verify it serializes correctly
     const { writeConfig } = require('../config-io.js');
     const writeResult = writeConfig(p, configObj);
     assert.equal(writeResult.ok, true);
@@ -344,7 +384,6 @@ describe('roo-code writeMcpServers()', () => {
 
     assert.equal(server.command, 'node');
     assert.deepStrictEqual(server.args, ['server.js']);
-    // Extra fields should NOT be present
     assert.equal('timeout' in server, false, 'timeout should not be in output');
     assert.equal('type' in server, false, 'type should not be in output');
     assert.equal('disabled' in server, false, 'disabled should not be in output');
@@ -396,10 +435,6 @@ describe('roo-code writeMcpServers()', () => {
   });
 });
 
-// -------------------------------------------------------
-// Round-trip test
-// -------------------------------------------------------
-
 describe('roo-code round-trip', () => {
   it('parse -> pass through -> write preserves all extra fields', () => {
     const p = tmpFile('roo-roundtrip.json');
@@ -431,13 +466,9 @@ describe('roo-code round-trip', () => {
     delete require.cache[require.resolve('./roo-code.js')];
     const rooCode = require('./roo-code.js');
 
-    // Parse
     const parsed = rooCode.parseMcpServers(p, originalConfig);
-
-    // Write back (returns object, not written to disk)
     const configObj = rooCode.writeMcpServers(parsed);
 
-    // Verify the object matches original
     const originalServers = originalConfig.mcpServers;
     const roundTrippedServers = configObj.mcpServers;
 
@@ -511,10 +542,6 @@ describe('roo-code round-trip', () => {
     });
   });
 });
-
-// -------------------------------------------------------
-// Module exports
-// -------------------------------------------------------
 
 describe('module exports', () => {
   it('exports name as "roo-code"', () => {
