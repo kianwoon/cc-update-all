@@ -1,3 +1,5 @@
+[![CI](https://github.com/kianwoon/cc-update-all/actions/workflows/ci.yml/badge.svg)](https://github.com/kianwoon/cc-update-all/actions/workflows/ci.yml)
+
 # cc-update-all
 
 <img width="592" height="239" alt="image" src="https://github.com/user-attachments/assets/95cf426d-5063-4f42-9e3b-0f2a03e6f2b2" />
@@ -122,6 +124,8 @@ The plugin marketplace update (`cc-update-all.sh`) is Claude Code-specific. The 
 
 Both MCP and extension features use a shared plugin-architecture with auto-discovered tool modules. Adding support for new editors requires only dropping a new module into `scripts-mcp/lib/tools/`.
 
+> **Platform support**: MCP config discovery works on **macOS**, **Linux** (via `$XDG_CONFIG_HOME`), and **Windows** (via `%APPDATA%`). Extension checking works on all platforms.
+
 ## Usage — Extensions
 
 ```
@@ -153,6 +157,10 @@ Both MCP and extension features use a shared plugin-architecture with auto-disco
 - `git` — required (plugin updates)
 - `jq` — optional (safe JSON output; best-effort fallback when missing)
 - `Node.js >= 18` — required (MCP server + extension updates)
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, coding standards, and PR guidelines.
 
 ## Exit Codes
 
