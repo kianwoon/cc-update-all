@@ -656,7 +656,8 @@ main() {
   # Step 5: Auto-reinstall if this plugin's own marketplace was updated
   # The plugin cache is a separate copy from the marketplace repo.
   # After git pull, the cache may be stale — reinstalling refreshes it.
-  if [[ "$_DRY_RUN" -eq 0 ]] && [[ "$_CHECK_MODE" -eq 0 ]] && [[ "$_JSON_MODE" -eq 0 ]]; then
+  # Runs in both normal and --check mode so users on old caches can recover.
+  if [[ "$_DRY_RUN" -eq 0 ]] && [[ "$_JSON_MODE" -eq 0 ]]; then
     local self_status
     self_status=$(get_mp_field "cc-update-all" 0 2>/dev/null || true)
     if [[ "$self_status" == "updated" ]]; then
