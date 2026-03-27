@@ -1,7 +1,6 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
-const { writeConfig } = require('../config-io');
 
 function getCandidateConfigPaths() {
   const home = os.homedir();
@@ -20,7 +19,11 @@ function getCandidateConfigPaths() {
       'mcp_settings.json',
     ),
     path.join(
-      process.env.XDG_CONFIG_HOME || path.join(home, '.config'),
+      process.env.XDG_CONFIG_HOME
+        ? (path.isAbsolute(process.env.XDG_CONFIG_HOME)
+            ? process.env.XDG_CONFIG_HOME
+            : path.join(home, process.env.XDG_CONFIG_HOME))
+        : path.join(home, '.config'),
       'Code',
       'User',
       'globalStorage',
@@ -129,9 +132,12 @@ function parseMcpServers(_configPath, rawJson) {
 // -------------------------------------------------------
 
 /**
+ * Returns the MCP server configuration data for the caller to write.
  * Wraps an array of server entries into the Roo Code MCP config schema.
  * Receives the COMPLETE array (both updated and unchanged entries).
  * Extra fields from parseMcpServers() are preserved in output.
+ * Note: Unlike cline.js, this function does NOT write to disk — it returns
+ * the data object for the caller (update-mcp.js) to write via config-io.
  *
  * @param {Array} servers - Complete array of server entries (output of parseMcpServers).
  * @returns {{ mcpServers: { [key: string]: object } }}

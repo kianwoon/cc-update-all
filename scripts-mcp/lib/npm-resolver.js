@@ -52,7 +52,7 @@ function extractPinnedVersion(args) {
     const versionAt = pkgArg.indexOf('@', firstSlash + 1);
     if (versionAt === -1) {
       // No version specified — floating
-      return { status: 'skipped_floating' };
+      return { status: 'skipped_floating', pkg: pkgArg, pkgArg, pinned: null };
     }
     pkg = pkgArg.substring(0, versionAt);
     version = pkgArg.substring(versionAt + 1);
@@ -60,7 +60,7 @@ function extractPinnedVersion(args) {
     // Unscoped package: name@version or name@version/sub/path
     const versionAt = pkgArg.indexOf('@');
     if (versionAt === -1) {
-      return { status: 'skipped_floating' };
+      return { status: 'skipped_floating', pkg: pkgArg, pkgArg, pinned: null };
     }
     pkg = pkgArg.substring(0, versionAt);
     version = pkgArg.substring(versionAt + 1);
@@ -74,10 +74,17 @@ function extractPinnedVersion(args) {
 
   // Check if version is a floating tag
   if (FLOATING_TAGS.has(version.toLowerCase())) {
-    return { status: 'skipped_floating' };
+    return { status: 'skipped_floating', pkg, pkgArg, pinned: version };
   }
 
-  return { pkg, pinned: version };
+  // Check if version is a semver range (not a pinned version)
+  const RANGE_PREFIXES = ['^', '~', '>=', '<=', '>', '<', '*', 'x'];
+  const isRange = RANGE_PREFIXES.some(p => version.startsWith(p)) || version.includes('||') || version.includes(' - ');
+  if (isRange) {
+    return { status: 'skipped_floating', pkg, pkgArg, pinned: version };
+  }
+
+  return { pkg, pkgArg, pinned: version };
 }
 
 // -------------------------------------------------------

@@ -135,12 +135,22 @@ async function processTool(discoveredTool, opts) {
 
       // Mutate the server args to update the version
       for (let j = 0; j < server.args.length; j++) {
-        if (server.args[j].includes(extracted.pkg)) {
-          server.args[j] = server.args[j].replace(
-            `${extracted.pkg}@${extracted.pinned}`,
-            `${extracted.pkg}@${resolveResult.latest}`,
-          );
-          break;
+        const arg = server.args[j];
+        // Match exact pkgArg or pkg@version pattern
+        const pattern = `${extracted.pkg}@`;
+        const atIdx = arg.indexOf(pattern);
+        if (atIdx !== -1) {
+          const prefix = arg.substring(0, atIdx + pattern.length);
+          const oldVersion = arg.substring(atIdx + pattern.length);
+          // Only replace if the version part matches what we extracted
+          if (oldVersion === extracted.pinned) {
+            const newArg = prefix + resolveResult.latest;
+            if (newArg !== arg) {
+              server.args[j] = newArg;
+              hasUpdates = true;
+              break;
+            }
+          }
         }
       }
     }
@@ -151,7 +161,7 @@ async function processTool(discoveredTool, opts) {
   // -- Write back if there are updates and not in check/dry-run mode
   if (hasUpdates && !opts.dryRun && !opts.check) {
     const writeData = tool.writeMcpServers(servers);
-    const writeResult = configIo.writeConfig(configPath, writeData);
+    const writeResult = configIo.writeConfig(configPath, writeData, { force: opts.force });
     if (!writeResult.ok) {
       toolResult.status = 'write_error';
       toolResult.writeError = writeResult.error;

@@ -28,6 +28,7 @@ trap 'rm -rf "$SUMMARY_DIR"' EXIT
 
 # Touch the result files
 : > "${SUMMARY_DIR}/partial_failure"
+: > "${SUMMARY_DIR}/mp_names"
 
 # ---------------------------------------------------------------------------
 # Color support — disabled when piped or in --json mode
@@ -71,13 +72,17 @@ dim()   { printf "${_COLOR_DIM}%s${_COLOR_RESET}\n" "$*"; }
 
 has_jq() { command -v jq &>/dev/null; }
 
+_json_escape() {
+  printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g' | tr '\n' ' '
+}
+
 # Result accumulator — stores per-marketplace results as tab-separated files:
 #   ${SUMMARY_DIR}/mp_<name>  = status<TAB>before<TAB>after<TAB>plugins
 record_mp_result() {
   local name="$1" status="$2" before="$3" after="$4" plugins="$5"
-  # Sanitize name for filename
+  # Hash-based safe name to avoid filename collisions
   local safe_name
-  safe_name=$(printf '%s' "$name" | tr -c 'a-zA-Z0-9_-' '_')
+  safe_name=$(printf '%s' "$name" | shasum -a 256 | cut -c1-16)
   printf '%s\t%s\t%s\t%s\n' "$status" "$before" "$after" "$plugins" > "${SUMMARY_DIR}/mp_${safe_name}"
   # Keep a list of marketplace names in order
   echo "$name" >> "${SUMMARY_DIR}/mp_names"
@@ -91,7 +96,7 @@ get_mp_field() {
   # $1=name $2=field_index (0=status, 1=before, 2=after, 3=plugins)
   local name="$1" idx="$2"
   local safe_name
-  safe_name=$(printf '%s' "$name" | tr -c 'a-zA-Z0-9_-' '_')
+  safe_name=$(printf '%s' "$name" | shasum -a 256 | cut -c1-16)
   local line
   line=$(cat "${SUMMARY_DIR}/mp_${safe_name}" 2>/dev/null) || return 1
   echo "$line" | cut -f$((idx + 1))
@@ -302,6 +307,10 @@ update_marketplace() {
   local upstream
   upstream="$(git -C "$install_dir" rev-parse --abbrev-ref "@{upstream}" 2>/dev/null || true)"
 
+  # Get before SHA (must be before upstream check since it's used there)
+  local before_sha
+  before_sha="$(git -C "$install_dir" rev-parse --short HEAD 2>/dev/null || echo "unknown")"
+
   if [[ -z "$upstream" ]]; then
     record_mp_result "$name" "no_upstream" "$before_sha" "$before_sha" "$plugins"
     warn "  [SKIPPED] ${name}  no upstream branch configured"
@@ -311,10 +320,6 @@ update_marketplace() {
   local remote branch_name
   remote="${upstream%%/*}"
   branch_name="${upstream#*/}"
-
-  # Get before SHA
-  local before_sha
-  before_sha="$(git -C "$install_dir" rev-parse --short HEAD 2>/dev/null || echo "unknown")"
 
   if [[ "$_DRY_RUN" -eq 1 ]]; then
     record_mp_result "$name" "dry_run" "$before_sha" "${before_sha} (would update)" "$plugins"
@@ -490,7 +495,9 @@ print_summary_json() {
           else
             plugins_json+=", "
           fi
-          plugins_json+="\"${plugin}\""
+          local ep
+          ep="$(_json_escape "$plugin")"
+          plugins_json+="\"${ep}\""
         done
         IFS="$IFS_SAVE"
         plugins_json+="]"
@@ -510,12 +517,18 @@ print_summary_json() {
         *)             output_status="$status" ;;
       esac
 
+      local en es eb ea
+      en="$(_json_escape "$name")"
+      es="$(_json_escape "$output_status")"
+      eb="$(_json_escape "$before")"
+      ea="$(_json_escape "$after")"
+
       marketplaces_json+="${comma}
     {
-      \"name\": \"${name}\",
-      \"status\": \"${output_status}\",
-      \"before\": \"${before}\",
-      \"after\": \"${after}\",
+      \"name\": \"${en}\",
+      \"status\": \"${es}\",
+      \"before\": \"${eb}\",
+      \"after\": \"${ea}\",
       \"installed_plugins\": ${plugins_json}
     }"
     done <<< "$sorted_names"
@@ -529,6 +542,9 @@ print_summary_json() {
 # ---------------------------------------------------------------------------
 main() {
   parse_args "$@"
+
+  # Check for required tools
+  command -v git &>/dev/null || { echo "Error: git is required but not found in PATH" >&2; exit 2; }
 
   # Check for required files
   if [[ ! -f "$_INSTALLED_PLUGINS_FILE" ]]; then

@@ -40,7 +40,7 @@ function readConfig(configPath) {
  * @param {object} data - Data to write.
  * @returns {{ ok: true } | { ok: false, error: string }}
  */
-function writeConfig(configPath, data) {
+function writeConfig(configPath, data, options = {}) {
   const bakPath = `${configPath}.bak`;
   const tmpPath = `${configPath}.tmp`;
 
@@ -123,10 +123,10 @@ function writeConfig(configPath, data) {
     // rename() preserves the source file's mtime on POSIX, so the post-rename
     // stat of configPath should match the pre-rename .tmp mtime.
     // If it differs, an external process modified the file after our rename.
-    if (hadOriginal && tmpMtimeMs !== null) {
+    if (!options.force && hadOriginal && tmpMtimeMs !== null) {
       try {
         const statAfter = fs.statSync(configPath);
-        if (statAfter.mtimeMs !== tmpMtimeMs) {
+        if (Math.abs(statAfter.mtimeMs - tmpMtimeMs) > 1) {
           // mtime differs — external process modified the file after our rename.
           // Restore from .bak to ensure original content is intact.
           try {
