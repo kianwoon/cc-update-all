@@ -46,3 +46,20 @@ jobs:
           fi
       - name: Validate package.json
         run: node -e "JSON.parse(require('fs').readFileSync('package.json','utf8')); console.log('package.json is valid JSON')"
+
+  version-sync:
+    name: Version Sync
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Extract versions
+        run: |
+          PKG_VERSION=$(jq -r '.version' package.json)
+          MP_VERSION=$(jq -r '.metadata.version' .claude-plugin/marketplace.json)
+          echo "package.json version:    $PKG_VERSION"
+          echo "marketplace.json version: $MP_VERSION"
+          if [ "$PKG_VERSION" != "$MP_VERSION" ]; then
+            echo "::error::Version mismatch between package.json ($PKG_VERSION) and .claude-plugin/marketplace.json ($MP_VERSION)"
+            exit 1
+          fi
+          echo "OK: Versions in sync"
