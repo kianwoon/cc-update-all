@@ -20,9 +20,9 @@ function getCandidateConfigPaths() {
     ),
     path.join(
       process.env.XDG_CONFIG_HOME
-        ? (path.isAbsolute(process.env.XDG_CONFIG_HOME)
-            ? process.env.XDG_CONFIG_HOME
-            : path.join(home, process.env.XDG_CONFIG_HOME))
+        ? path.isAbsolute(process.env.XDG_CONFIG_HOME)
+          ? process.env.XDG_CONFIG_HOME
+          : path.join(home, process.env.XDG_CONFIG_HOME)
         : path.join(home, '.config'),
       'Code',
       'User',
