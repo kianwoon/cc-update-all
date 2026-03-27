@@ -538,6 +538,116 @@ print_summary_json() {
 }
 
 # ---------------------------------------------------------------------------
+# Fix stale cache version — runs on every execution
+# After any update, the cache directory may still be named after the old
+# version even though the marketplace repo has the new version.
+# This standalone check fixes the mismatch regardless of update status.
+# ---------------------------------------------------------------------------
+_fix_stale_cache_version() {
+  [[ "$_DRY_RUN" -eq 0 ]] && [[ "$_JSON_MODE" -eq 0 ]] || return 0
+
+  local _mp_pkg="$_PLUGINS_DIR/marketplaces/cc-update-all/package.json"
+  local _plugin_key="update-all-plugins@cc-update-all"
+  local _cache_base="$_PLUGINS_DIR/cache/cc-update-all/update-all-plugins"
+
+  # Skip if marketplace package.json doesn't exist
+  [[ -f "$_mp_pkg" ]] || return 0
+
+  # Read NEW version from marketplace repo
+  local _new_version=""
+  if has_jq; then
+    _new_version=$(jq -r '.version // empty' "$_mp_pkg" 2>/dev/null)
+  else
+    _new_version=$(grep -oE '"version"\s*:\s*"[^"]+"' "$_mp_pkg" 2>/dev/null \
+      | head -1 | sed -E 's/.*"version"\s*:\s*"([^"]+)".*/\1/')
+  fi
+  [[ -n "$_new_version" ]] || return 0
+
+  # Read CURRENT version from installed_plugins.json
+  local _old_version=""
+  if [[ -f "$_INSTALLED_PLUGINS_FILE" ]]; then
+    if has_jq; then
+      _old_version=$(jq -r --arg k "$_plugin_key" \
+        '.plugins[$k][0].version // empty' "$_INSTALLED_PLUGINS_FILE" 2>/dev/null)
+    else
+      _old_version=$(sed -n "/\"$_plugin_key\"/,/gitCommitSha/p" "$_INSTALLED_PLUGINS_FILE" 2>/dev/null \
+        | grep -oE '"version"\s*:\s*"[^"]+"' \
+        | head -1 | sed -E 's/.*"version"\s*:\s*"([^"]+)".*/\1/')
+    fi
+  fi
+  [[ -n "$_old_version" ]] || return 0
+
+  # Skip if versions match
+  [[ "$_old_version" != "$_new_version" ]] || return 0
+
+  # Versions differ — fix the stale cache
+  local _old_cache_dir="${_cache_base}/${_old_version}"
+  local _new_cache_dir="${_cache_base}/${_new_version}"
+
+  echo ""
+  info "Detected stale cache version ($_old_version -> $_new_version). Fixing..."
+
+  # Rename the cache directory
+  if [[ -d "$_old_cache_dir" ]] && [[ ! -d "$_new_cache_dir" ]]; then
+    if mv "$_old_cache_dir" "$_new_cache_dir" 2>/dev/null; then
+      ok "Cache directory renamed: $_old_version -> $_new_version"
+    else
+      warn "Failed to rename cache directory."
+      return 1
+    fi
+  fi
+
+  # Update installed_plugins.json
+  if [[ -f "$_INSTALLED_PLUGINS_FILE" ]]; then
+    local _timestamp
+    _timestamp=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z" 2>/dev/null || echo "")
+    local _new_sha=""
+    local _mp_repo_dir="$_PLUGINS_DIR/marketplaces/cc-update-all"
+    if [[ -d "$_mp_repo_dir/.git" ]]; then
+      _new_sha=$(git -C "$_mp_repo_dir" rev-parse HEAD 2>/dev/null || echo "")
+    fi
+
+    if has_jq; then
+      local _ts_arg="${_timestamp:-unknown}"
+      local _sha_arg="${_new_sha:-unknown}"
+      jq \
+        --arg k "$_plugin_key" \
+        --arg v "$_new_version" \
+        --arg p "$_new_cache_dir" \
+        --arg t "$_ts_arg" \
+        --arg s "$_sha_arg" \
+        '.plugins[$k][0].version = $v
+         | .plugins[$k][0].installPath = $p
+         | .plugins[$k][0].lastUpdated = $t
+         | .plugins[$k][0].gitCommitSha = $s' \
+        "$_INSTALLED_PLUGINS_FILE" > "${_INSTALLED_PLUGINS_FILE}.tmp" 2>/dev/null \
+        && mv "${_INSTALLED_PLUGINS_FILE}.tmp" "$_INSTALLED_PLUGINS_FILE" 2>/dev/null
+    else
+      local _tmp_file="${_INSTALLED_PLUGINS_FILE}.tmp"
+      sed \
+        -e "s|\"version\": \"${_old_version}\"|\"version\": \"${_new_version}\"|g" \
+        -e "s|\"installPath\": \"${_old_cache_dir}\"|\"installPath\": \"${_new_cache_dir}\"|g" \
+        "$_INSTALLED_PLUGINS_FILE" > "$_tmp_file" 2>/dev/null
+      if [[ -n "$_timestamp" ]]; then
+        sed -i '' -e "s|\"lastUpdated\": \"[^\"]*\"|\"lastUpdated\": \"${_timestamp}\"|g" "$_tmp_file" 2>/dev/null
+      fi
+      if [[ -n "$_new_sha" ]]; then
+        sed -i '' -e "s|\"gitCommitSha\": \"[^\"]*\"|\"gitCommitSha\": \"${_new_sha}\"|g" "$_tmp_file" 2>/dev/null
+      fi
+      mv "$_tmp_file" "$_INSTALLED_PLUGINS_FILE" 2>/dev/null
+    fi
+
+    if [[ $? -eq 0 ]]; then
+      ok "Registry updated to version $_new_version"
+    else
+      warn "Failed to update installed_plugins.json."
+    fi
+  fi
+
+  ok "Stale cache fixed. /reload-plugins to activate."
+}
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 main() {
@@ -680,107 +790,6 @@ main() {
       echo ""
       info "This plugin was updated. Refreshing cache..."
       if claude plugin install update-all-plugins@cc-update-all --scope user 2>&1; then
-        # --- Fix stale cache directory and registry after self-update ---
-        # The cache dir is named after the OLD version (e.g. 1.3.3/) even
-        # though the marketplace repo now contains the NEW version.  Rename
-        # the directory and update installed_plugins.json to match.
-        local _mp_pkg="$_PLUGINS_DIR/marketplaces/cc-update-all/package.json"
-        local _new_version=""
-        local _old_version=""
-        local _old_cache_dir=""
-        local _new_cache_dir=""
-        local _plugin_key="update-all-plugins@cc-update-all"
-        local _cache_base="$_PLUGINS_DIR/cache/cc-update-all/update-all-plugins"
-
-        # 1. Read the NEW version from marketplace repo's package.json
-        if [[ -f "$_mp_pkg" ]]; then
-          if has_jq; then
-            _new_version=$(jq -r '.version // empty' "$_mp_pkg" 2>/dev/null)
-          else
-            _new_version=$(grep -oE '"version"\s*:\s*"[^"]+"' "$_mp_pkg" 2>/dev/null \
-              | head -1 | sed -E 's/.*"version"\s*:\s*"([^"]+)".*/\1/')
-          fi
-        fi
-
-        # 2. Read the CURRENT (old) version from installed_plugins.json
-        if [[ -f "$_INSTALLED_PLUGINS_FILE" ]] && [[ -n "$_new_version" ]]; then
-          if has_jq; then
-            _old_version=$(jq -r \
-              --arg k "$_plugin_key" \
-              '.plugins[$k][0].version // empty' \
-              "$_INSTALLED_PLUGINS_FILE" 2>/dev/null)
-          else
-            _old_version=$(sed -n "/\"$_plugin_key\"/,/gitCommitSha/p" "$_INSTALLED_PLUGINS_FILE" 2>/dev/null \
-              | grep -oE '"version"\s*:\s*"[^"]+"' \
-              | head -1 | sed -E 's/.*"version"\s*:\s*"([^"]+)".*/\1/')
-          fi
-        fi
-
-        # 3. If versions differ, rename cache dir and update the registry
-        if [[ -n "$_new_version" ]] && [[ -n "$_old_version" ]] \
-           && [[ "$_old_version" != "$_new_version" ]]; then
-          _old_cache_dir="${_cache_base}/${_old_version}"
-          _new_cache_dir="${_cache_base}/${_new_version}"
-
-          # Rename the cache directory
-          if [[ -d "$_old_cache_dir" ]] && [[ ! -d "$_new_cache_dir" ]]; then
-            if mv "$_old_cache_dir" "$_new_cache_dir" 2>/dev/null; then
-              ok "Cache directory renamed: $_old_version -> $_new_version"
-            else
-              warn "Failed to rename cache directory."
-            fi
-          fi
-
-          # Update installed_plugins.json
-          if [[ -f "$_INSTALLED_PLUGINS_FILE" ]]; then
-            local _new_path="${_new_cache_dir}"
-            local _timestamp
-            _timestamp=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z" 2>/dev/null || echo "")
-            local _new_sha
-            local _mp_repo_dir="$_PLUGINS_DIR/marketplaces/cc-update-all"
-            if [[ -d "$_mp_repo_dir/.git" ]]; then
-              _new_sha=$(git -C "$_mp_repo_dir" rev-parse HEAD 2>/dev/null || echo "")
-            fi
-
-            if has_jq; then
-              local _ts_arg="${_timestamp:-unknown}"
-              local _sha_arg="${_new_sha:-unknown}"
-              jq \
-                --arg k "$_plugin_key" \
-                --arg v "$_new_version" \
-                --arg p "$_new_path" \
-                --arg t "$_ts_arg" \
-                --arg s "$_sha_arg" \
-                '.plugins[$k][0].version = $v
-                 | .plugins[$k][0].installPath = $p
-                 | .plugins[$k][0].lastUpdated = $t
-                 | .plugins[$k][0].gitCommitSha = $s' \
-                "$_INSTALLED_PLUGINS_FILE" > "${_INSTALLED_PLUGINS_FILE}.tmp" 2>/dev/null \
-                && mv "${_INSTALLED_PLUGINS_FILE}.tmp" "$_INSTALLED_PLUGINS_FILE" 2>/dev/null
-            else
-              # sed fallback: replace version, installPath, lastUpdated, gitCommitSha
-              local _tmp_file="${_INSTALLED_PLUGINS_FILE}.tmp"
-              sed \
-                -e "s|\"version\": \"${_old_version}\"|\"version\": \"${_new_version}\"|g" \
-                -e "s|\"installPath\": \"${_old_cache_dir}\"|\"installPath\": \"${_new_cache_dir}\"|g" \
-                "$_INSTALLED_PLUGINS_FILE" > "$_tmp_file" 2>/dev/null
-              if [[ -n "$_timestamp" ]]; then
-                sed -i '' -e "s|\"lastUpdated\": \"[^\"]*\"|\"lastUpdated\": \"${_timestamp}\"|g" "$_tmp_file" 2>/dev/null
-              fi
-              if [[ -n "$_new_sha" ]]; then
-                sed -i '' -e "s|\"gitCommitSha\": \"[^\"]*\"|\"gitCommitSha\": \"${_new_sha}\"|g" "$_tmp_file" 2>/dev/null
-              fi
-              mv "$_tmp_file" "$_INSTALLED_PLUGINS_FILE" 2>/dev/null
-            fi
-
-            if [[ $? -eq 0 ]]; then
-              ok "Registry updated to version $_new_version"
-            else
-              warn "Failed to update installed_plugins.json."
-            fi
-          fi
-        fi
-
         ok "Plugin cache refreshed. /reload-plugins to activate."
       else
         warn "Auto-reinstall failed. Run manually:"
@@ -788,6 +797,12 @@ main() {
       fi
     fi
   fi
+
+  # Step 6: Fix stale cache version (runs on every execution)
+  # This catches the case where a previous run updated the marketplace
+  # but couldn't fix the cache directory (e.g. chicken-and-egg: old script
+  # didn't have this code, new script only runs after marketplace is current).
+  _fix_stale_cache_version
 
   # Exit code
   if check_partial_failure; then
