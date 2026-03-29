@@ -80,7 +80,7 @@ describe('readConfig', () => {
 describe('writeConfig', () => {
   beforeEach(() => cleanup());
 
-  it('creates backup and cleans it up after successful write', function() {
+  it('creates backup and cleans it up after successful write', () => {
     const p = tmpFile('backup-test.json');
     const original = { original: true };
     writeRaw(p, JSON.stringify(original, null, 2));
@@ -90,7 +90,7 @@ describe('writeConfig', () => {
     assert.equal(result.ok, true);
 
     // Backup should be cleaned up after successful write
-    assert.ok(!fs.existsSync(p + '.bak'), 'backup removed after write');
+    assert.ok(!fs.existsSync(`${p}.bak`), 'backup removed after write');
 
     // Verify new content was written
     const written = JSON.parse(readRaw(p));
