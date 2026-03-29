@@ -2,14 +2,31 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 // ---------------------------------------------------------------------------
-// Load all tool modules from tools/ directory
+// Module cache — loaded once, reused across discover/getTool/listToolNames
 // ---------------------------------------------------------------------------
+let _cachedModules = null;
 
 function _loadToolModules() {
+  if (_cachedModules !== null) {
+    return _cachedModules;
+  }
+
   const toolsDir = path.join(__dirname, 'tools');
   const files = fs.readdirSync(toolsDir).filter((f) => f.endsWith('.js') && !f.endsWith('.test.js'));
 
-  return files.map((f) => require(path.join(toolsDir, f)));
+  _cachedModules = files
+    .map((f) => {
+      const filePath = path.join(toolsDir, f);
+      try {
+        return require(filePath);
+      } catch (err) {
+        console.error(`Warning: failed to load tool module ${f}: ${err.message}`);
+        return null;
+      }
+    })
+    .filter(Boolean);
+
+  return _cachedModules;
 }
 
 // ---------------------------------------------------------------------------

@@ -21,7 +21,10 @@ function discover() {
  * @returns {Array<{ key: string, command: string, args: string[], env?: object }>}
  */
 function parseMcpServers(configPath, rawJson) {
-  const servers = rawJson?.mcpServers ? rawJson.mcpServers : {};
+  const servers =
+    rawJson?.mcpServers && typeof rawJson.mcpServers === 'object' && !Array.isArray(rawJson.mcpServers)
+      ? rawJson.mcpServers
+      : {};
   return Object.entries(servers).map(([key, entry]) => ({
     key,
     ...entry,

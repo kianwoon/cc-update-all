@@ -292,13 +292,14 @@ describe('cline writeMcpServers()', () => {
 
     delete require.cache[require.resolve('./cline.js')];
     const cline = require('./cline.js');
-    const result = cline.writeMcpServers(servers, p);
-    assert.equal(result.ok, true);
+    const result = cline.writeMcpServers(servers);
+    assert.ok(result.mcpServers, 'should return mcpServers object');
+
+    const configIo = require('../config-io.js');
+    const configWriteResult = configIo.writeConfig(p, result);
+    assert.equal(configWriteResult.ok, true);
 
     const written = JSON.parse(readRaw(p));
-    assert.ok(written.mcpServers, 'should have mcpServers key');
-    assert.ok(written.mcpServers.anthropic, 'should have server entry');
-
     const server = written.mcpServers.anthropic;
     assert.equal(server.command, 'npx');
     assert.deepStrictEqual(server.args, ['-y', '@anthropic/mcp-server@1.2.3']);
@@ -321,9 +322,11 @@ describe('cline writeMcpServers()', () => {
 
     delete require.cache[require.resolve('./cline.js')];
     const cline = require('./cline.js');
-    const result = cline.writeMcpServers(servers, p);
-    assert.equal(result.ok, true);
+    const result = cline.writeMcpServers(servers);
+    assert.ok(result.mcpServers, 'should return mcpServers object');
 
+    const configIo = require('../config-io.js');
+    configIo.writeConfig(p, result);
     const written = JSON.parse(readRaw(p));
     const server = written.mcpServers.minimal;
 
@@ -358,9 +361,11 @@ describe('cline writeMcpServers()', () => {
 
     delete require.cache[require.resolve('./cline.js')];
     const cline = require('./cline.js');
-    const result = cline.writeMcpServers(servers, p);
-    assert.equal(result.ok, true);
+    const result = cline.writeMcpServers(servers);
+    assert.ok(result.mcpServers, 'should return mcpServers object');
 
+    const configIo = require('../config-io.js');
+    configIo.writeConfig(p, result);
     const written = JSON.parse(readRaw(p));
     assert.ok(written.mcpServers['server-a']);
     assert.ok(written.mcpServers['server-b']);
@@ -406,9 +411,11 @@ describe('cline round-trip', () => {
     const cline = require('./cline.js');
 
     const parsed = cline.parseMcpServers(p, originalConfig);
-    const writeResult = cline.writeMcpServers(parsed, p);
-    assert.equal(writeResult.ok, true);
+    const writeResult = cline.writeMcpServers(parsed);
+    assert.ok(writeResult.mcpServers, 'should return mcpServers object');
 
+    const configIo = require('../config-io.js');
+    configIo.writeConfig(p, writeResult);
     const roundTripped = JSON.parse(readRaw(p));
     const originalServers = originalConfig.mcpServers;
     const roundTrippedServers = roundTripped.mcpServers;

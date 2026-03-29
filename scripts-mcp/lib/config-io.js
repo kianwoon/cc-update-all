@@ -146,6 +146,15 @@ function writeConfig(configPath, data, options = {}) {
       }
     }
 
+    // Clean up .bak file after successful write
+    if (hadOriginal) {
+      try {
+        fs.unlinkSync(bakPath);
+      } catch (_) {
+        /* keep .bak for recovery */
+      }
+    }
+
     // Clean up .tmp if it somehow still exists
     try {
       fs.unlinkSync(tmpPath);
