@@ -2,14 +2,29 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 // ---------------------------------------------------------------------------
-// Load all tool modules from tools/ directory
+// Module cache — loaded once, reused across discover/getTool/listToolNames
 // ---------------------------------------------------------------------------
+let _cachedModules = null;
 
 function _loadToolModules() {
-  const toolsDir = path.join(__dirname, 'tools');
-  const files = fs.readdirSync(toolsDir).filter((f) => f.endsWith('.js') && !f.endsWith('.test.js'));
+  if (_cachedModules !== null) {
+    return _cachedModules;
+  }
 
-  return files.map((f) => require(path.join(toolsDir, f)));
+  const toolsDir = path.join(__dirname, 'tools');
+  const files = fs.readdirSync(toolsDir).filter(function(f) { return f.endsWith('.js') && !f.endsWith('.test.js'); });
+
+  _cachedModules = files.map(function(f) {
+    const filePath = path.join(toolsDir, f);
+    try {
+      return require(filePath);
+    } catch (err) {
+      console.error('Warning: failed to load tool module ' + f + ': ' + err.message);
+      return null;
+    }
+  }).filter(Boolean);
+
+  return _cachedModules;
 }
 
 // ---------------------------------------------------------------------------
@@ -20,7 +35,7 @@ function discover() {
   const modules = _loadToolModules();
   const found = [];
 
-  modules.forEach((mod) => {
+  modules.forEach(function(mod) {
     const configPath = mod.discover();
     if (configPath) {
       found.push({
@@ -54,7 +69,7 @@ function getTool(name) {
 
 function listToolNames() {
   const modules = _loadToolModules();
-  return modules.map((mod) => mod.name);
+  return modules.map(function(mod) { return mod.name; });
 }
 
 module.exports = {

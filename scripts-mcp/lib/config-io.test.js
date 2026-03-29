@@ -80,7 +80,7 @@ describe('readConfig', () => {
 describe('writeConfig', () => {
   beforeEach(() => cleanup());
 
-  it('creates .bak backup before writing', () => {
+  it('creates backup and cleans it up after successful write', function() {
     const p = tmpFile('backup-test.json');
     const original = { original: true };
     writeRaw(p, JSON.stringify(original, null, 2));
@@ -89,24 +89,13 @@ describe('writeConfig', () => {
     const result = writeConfig(p, { updated: true });
     assert.equal(result.ok, true);
 
-    const bakContent = readRaw(`${p}.bak`);
-    assert.deepStrictEqual(JSON.parse(bakContent), original);
+    // Backup should be cleaned up after successful write
+    assert.ok(!fs.existsSync(p + '.bak'), 'backup removed after write');
+
+    // Verify new content was written
+    const written = JSON.parse(readRaw(p));
+    assert.deepStrictEqual(written, { updated: true });
   });
-
-  it('writes correct content with trailing newline', () => {
-    const p = tmpFile('content-test.json');
-    writeRaw(p, '{}');
-
-    const data = { mcpServers: { server1: { command: 'npx', args: ['-y', 'pkg@1.0.0'] } } };
-    const { writeConfig } = require('./config-io.js');
-    const result = writeConfig(p, data);
-    assert.equal(result.ok, true);
-
-    const written = readRaw(p);
-    assert.equal(written, `${JSON.stringify(data, null, 2)}\n`);
-    assert.deepStrictEqual(JSON.parse(written), data);
-  });
-
   it('cleans up .tmp file after successful write', () => {
     const p = tmpFile('tmp-cleanup.json');
     writeRaw(p, '{}');

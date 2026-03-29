@@ -80,7 +80,8 @@ function extractPinnedVersion(args) {
   // Check if version is a semver range (not a pinned version)
   const RANGE_PREFIXES = ['^', '~', '>=', '<=', '>', '<', '*', 'x'];
   const isRange =
-    RANGE_PREFIXES.some((p) => version.startsWith(p)) || version.includes('||') || version.includes(' - ');
+    RANGE_PREFIXES.some((p) => version.startsWith(p)) || version.includes('||') || version.includes(' - ') ||
+    /\.[xX*]\s*$/.test(version);
   if (isRange) {
     return { status: 'skipped_floating', pkg, pkgArg, pinned: version };
   }

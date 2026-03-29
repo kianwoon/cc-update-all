@@ -73,7 +73,7 @@ dim()   { printf "${_COLOR_DIM}%s${_COLOR_RESET}\n" "$*"; }
 has_jq() { command -v jq &>/dev/null; }
 
 _json_escape() {
-  printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g' | tr '\n' ' '
+  printf '%s' "$1" | sed 's/[\x00-\x1f\x7f]//g' | tr -d '\r' | sed 's/\\/\\\\/g; s/"/\\"/g' | tr '\n' ' '
 }
 
 # Result accumulator — stores per-marketplace results as tab-separated files:

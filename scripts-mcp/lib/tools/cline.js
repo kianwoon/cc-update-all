@@ -1,7 +1,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
-const { writeConfig } = require('../config-io');
+
 
 function getCandidateConfigPaths() {
   const home = os.homedir();
@@ -120,16 +120,17 @@ function parseMcpServers(_configPath, rawJson) {
 }
 
 /**
- * Writes a complete array of MCP server entries to the Cline config file,
- * wrapping them in the Cline schema and preserving all extra fields.
+ * Returns the MCP server configuration data for the caller to write.
+ * Wraps an array of server entries into the Cline MCP config schema,
+ * preserving all extra fields.
+ * Receives the COMPLETE array (both updated and unchanged entries).
+ * Note: This function does NOT write to disk — it returns the data object
+ * for the caller (update-mcp.js) to write via config-io.
  *
  * @param {Array} servers - Complete array of server entries (output of parseMcpServers).
- * @param {string} [configPath] - Config file path. Defaults to the discovered Cline path.
- * @returns {{ ok: true } | { ok: false, error: string }}
+ * @returns {{ mcpServers: { [key: string]: object } }}
  */
-function writeMcpServers(servers, configPath) {
-  const targetPath = configPath || discover();
-
+function writeMcpServers(servers) {
   const mcpServers = {};
   for (const server of servers) {
     const { key, ...rest } = server;
@@ -152,7 +153,7 @@ function writeMcpServers(servers, configPath) {
     }
   }
 
-  return writeConfig(targetPath, { mcpServers });
+  return { mcpServers };
 }
 
 module.exports = {
